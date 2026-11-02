@@ -1,0 +1,12 @@
+[app]
+id = "pod-stats"
+name = "Pod stats"
+version = "0.1.0"
+author = "agent:claude (asked by Alice, Marketing)"
+description = "Widget next to the booking grid: how busy each pod is."
+
+[slots]
+widgets = ["home.aside"]
+
+[capabilities]
+grant = ["pods-read", "bookings-read"]

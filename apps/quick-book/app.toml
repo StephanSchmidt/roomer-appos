@@ -1,0 +1,13 @@
+[app]
+id = "quick-book"
+name = "Quick book"
+version = "1.0.1"
+author = "agent:claude (asked by Bob, Product)"
+description = "Book a pod by finishing one sentence, with the whole floor's day below it."
+
+[slots]
+routes = ["/quick"]
+nav = "Quick book"
+
+[capabilities]
+grant = ["pods-read", "bookings-read", "bookings-write"]

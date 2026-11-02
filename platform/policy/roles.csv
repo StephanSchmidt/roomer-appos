@@ -1,0 +1,12 @@
+# Platform role rules: which roles may use a capability, through any app.
+# App grants (g2) come from approved manifests; users get roles from the
+# users table. Nothing else is edited by hand.
+p, member, pods-read
+p, member, bookings-read
+p, member, bookings-write
+p, member, identity
+p, member, log
+p, admin, pods-write
+
+# Admins can do everything members can.
+g, admin, member

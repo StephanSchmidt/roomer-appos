@@ -1,0 +1,66 @@
+name: release
+
+# Push a tag like v0.1.0 to build the roomer shell, with the apps built into
+# it, and publish a GitHub release. install.sh downloads
+# roomer-<target>.tar.gz and its .sha256 from it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm }
+          - { target: aarch64-apple-darwin, os: macos-15 }
+          - { target: x86_64-apple-darwin, os: macos-15 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }},wasm32-wasip2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+          workspaces: |
+            apps
+            platform
+      # The preinstalled apps first: platform/build.rs embeds them.
+      - run: cargo build --release --locked --target wasm32-wasip2
+        working-directory: apps
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+        working-directory: platform
+      - name: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          name=roomer-${{ matrix.target }}.tar.gz
+          mkdir dist
+          tar -czf "dist/$name" -C platform/target/${{ matrix.target }}/release roomer
+          cd dist
+          if command -v sha256sum >/dev/null; then sha256sum "$name"; else shasum -a 256 "$name"; fi > "$name.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cp install.sh dist/
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes --verify-tag

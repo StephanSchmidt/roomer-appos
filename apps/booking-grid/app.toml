@@ -1,0 +1,13 @@
+[app]
+id = "booking-grid"
+name = "Booking grid"
+version = "1.0.0"
+author = "agent:claude (asked by Bob, Product)"
+description = "Book a pod in three steps: pick a pod, pick your hours, confirm. Cancel your own bookings."
+
+[slots]
+routes = ["/", "/bookings"]
+nav = "Book a pod"
+
+[capabilities]
+grant = ["pods-read", "bookings-read", "bookings-write", "identity"]

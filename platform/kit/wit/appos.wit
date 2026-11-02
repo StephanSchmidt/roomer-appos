@@ -1,0 +1,113 @@
+// The AppOS platform contract.
+//
+// Every interface below is a capability. An app's manifest grants a subset
+// of them, and the shell links only the granted ones into the app. An app
+// that imports anything else is refused at deploy time.
+package appos:platform@0.1.0;
+
+interface types {
+    record pod {
+        id: u32,
+        name: string,
+    }
+
+    record booking {
+        id: u32,
+        pod-id: u32,
+        /// YYYY-MM-DD
+        date: string,
+        hour: u8,
+        subject: string,
+        booker-name: string,
+        /// True when the signed-in user made this booking.
+        mine: bool,
+    }
+
+    record user {
+        id: string,
+        name: string,
+    }
+
+    record request {
+        method: string,
+        path: string,
+        /// "page" for a full page or action, otherwise the widget slot name.
+        slot: string,
+        query: list<tuple<string, string>>,
+        form: list<tuple<string, string>>,
+        /// Today's date in the site's timezone, YYYY-MM-DD.
+        today: string,
+        /// The current time in the site's timezone, HH:MM.
+        now: string,
+    }
+
+    enum body-kind {
+        /// The shell wraps the body in the site layout.
+        page,
+        /// The body is returned as is (htmx partials, widgets).
+        fragment,
+    }
+
+    record response {
+        status: u16,
+        kind: body-kind,
+        /// Page title. The shell owns <head>; apps only ask for a title.
+        title: option<string>,
+        body: string,
+        /// Only `location` and `hx-*` headers are passed through.
+        headers: list<tuple<string, string>>,
+    }
+}
+
+interface pods-read {
+    use types.{pod};
+    all: func() -> list<pod>;
+}
+
+interface pods-write {
+    use types.{pod};
+    create: func(name: string) -> result<pod, string>;
+}
+
+interface bookings-read {
+    use types.{booking};
+    /// The hours a booking can start at. The platform owns this rule.
+    bookable-hours: func() -> list<u8>;
+    list-for-day: func(date: string) -> result<list<booking>, string>;
+}
+
+interface bookings-write {
+    use types.{booking};
+    /// Books a slot for the signed-in user.
+    create: func(pod-id: u32, date: string, hour: u8, subject: string) -> result<booking, string>;
+    /// Cancels a booking, but only one the signed-in user made.
+    cancel-own: func(id: u32) -> result<_, string>;
+}
+
+interface identity {
+    use types.{user};
+    current-user: func() -> option<user>;
+}
+
+interface log {
+    info: func(message: string);
+    warn: func(message: string);
+}
+
+interface handler {
+    use types.{request, response};
+    handle: func(req: request) -> response;
+}
+
+/// The world apps are built against. Imports an app never calls are dropped
+/// from the compiled component, so its real imports are exactly what it uses.
+world app {
+    import pods-read;
+    import pods-write;
+    import bookings-read;
+    import bookings-write;
+    import identity;
+    import log;
+
+    export handler;
+}

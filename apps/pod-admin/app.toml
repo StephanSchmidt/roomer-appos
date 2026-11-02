@@ -1,0 +1,13 @@
+[app]
+id = "pod-admin"
+name = "Pod admin"
+version = "1.0.0"
+author = "agent:claude (asked by Dana, Platform team)"
+description = "Lists pods and adds new ones."
+
+[slots]
+routes = ["/pods"]
+nav = "Pods"
+
+[capabilities]
+grant = ["pods-read", "pods-write"]

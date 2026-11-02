@@ -1,0 +1,19 @@
+# Marketing's side of Roomer: the apps. They build against the platform kit
+# (kit/: HOST-API.md, the WIT contract and the SDK), never against the shell.
+[workspace]
+resolver = "3"
+members = ["kit/sdk", "booking-grid", "pod-admin", "pod-stats", "quick-book"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+appos-sdk = { path = "kit/sdk" }
+maud = "0.27"
+wit-bindgen = "0.63"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

@@ -1,0 +1,11 @@
+# Allowlist: everything is ignored unless re-included below.
+/*
+!/.gitignore
+!/.github/
+!/Makefile
+!/README.md
+!/LICENSE
+!/install.sh
+!/apps/
+!/platform/
+target/
