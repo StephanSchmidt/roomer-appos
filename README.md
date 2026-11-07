@@ -14,6 +14,12 @@ Roomer is a small pod-booking site built this way, in Rust with
 to WebAssembly and rendered on the server, inside the sandbox. It is the
 demo for [appfuzz](https://appfuzz.dev), the app review.
 
+![Roomer's architecture: people's requests reach the native shell, which asks
+each app for its HTML. The apps render with Leptos inside a Wasm sandbox and
+reach the platform only through the calls their manifest grants. Every new
+version goes to appfuzz first: pass goes live, warn goes live flagged, fail is
+refused.](docs/architecture.svg)
+
 ## Two sides
 
 | | Who | What |

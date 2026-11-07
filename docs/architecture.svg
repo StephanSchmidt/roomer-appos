@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 1400 950" width="1400" height="950" font-family="Inter, 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif">
+  <title>Roomer on AppOS, rendered with Leptos</title>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b4b52"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2f7d45"/>
+    </marker>
+  </defs>
+  <style>
+    .h1 { font-size: 30px; font-weight: 700; fill: #1c1c21; }
+    .sub { font-size: 15px; fill: #5d5d66; }
+    .b { font-size: 16px; font-weight: 700; fill: #1c1c21; }
+    .s { font-size: 13px; fill: #5d5d66; }
+    .xs { font-size: 12px; fill: #5d5d66; }
+    .m { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 14px; font-weight: 700; fill: #1c1c21; }
+    .box { fill: #ffffff; stroke: #cfcbc2; stroke-width: 1.5; }
+    .line { stroke: #4b4b52; stroke-width: 1.6; fill: none; }
+    .gline { stroke: #2f7d45; stroke-width: 1.6; fill: none; }
+    .lep { fill: #fde7e2; stroke: #e0907f; stroke-width: 1; }
+    .lept { font-size: 12px; font-weight: 700; fill: #a83a22; }
+    .c { text-anchor: middle; }
+  </style>
+
+  <rect width="1400" height="950" fill="#faf8f4"/>
+
+  <!-- Title -->
+  <text x="40" y="52" class="h1">Roomer on AppOS, rendered with Leptos</text>
+  <text x="40" y="80" class="sub">A native shell owns the site. Apps from teams outside engineering run as sandboxed Wasm components, and appfuzz reviews every version before it goes live.</text>
+
+  <!-- Actors -->
+  <rect x="60" y="110" width="460" height="84" rx="12" class="box"/>
+  <text x="84" y="142" class="b">People using the site</text>
+  <text x="84" y="166" class="s">a browser: HTML + htmx, strict CSP, no app JavaScript</text>
+
+  <rect x="760" y="110" width="420" height="84" rx="12" class="box"/>
+  <text x="784" y="142" class="b">Marketing · sales · product</text>
+  <text x="784" y="166" class="s">and their agents, with only the platform kit</text>
+
+  <!-- Shell -->
+  <rect x="40" y="230" width="950" height="600" rx="18" fill="#ffffff" stroke="#b3ada1" stroke-width="1.8"/>
+  <text x="150" y="262"><tspan class="b" font-size="17">Roomer shell</tspan><tspan class="s"> · native Rust, axum + Leptos · the platform team's side</tspan></text>
+
+  <!-- Request path -->
+  <rect x="70" y="290" width="100" height="72" rx="10" class="box"/>
+  <text x="120" y="322" class="b c">axum</text>
+  <text x="120" y="344" class="xs c">routes</text>
+
+  <rect x="190" y="290" width="100" height="72" rx="10" class="box"/>
+  <text x="240" y="322" class="b c">sign-in</text>
+  <text x="240" y="344" class="xs c">who is asking</text>
+
+  <rect x="310" y="290" width="130" height="72" rx="10" class="box"/>
+  <text x="375" y="322" class="b c">Casbin</text>
+  <text x="375" y="344" class="xs c">who may do what</text>
+
+  <rect x="460" y="290" width="270" height="72" rx="10" class="box"/>
+  <text x="478" y="320" class="b">Page shell</text>
+  <rect x="640" y="304" width="76" height="22" rx="11" class="lep"/>
+  <text x="678" y="319" class="lept c">Leptos</text>
+  <text x="478" y="346" class="xs">layout · nav · App versions · usage</text>
+
+  <path d="M170,326 H188" class="line" marker-end="url(#arr)"/>
+  <path d="M290,326 H308" class="line" marker-end="url(#arr)"/>
+  <path d="M440,326 H458" class="line" marker-end="url(#arr)"/>
+
+  <!-- Page shell <-> sandbox -->
+  <path d="M560,362 V418" class="line" marker-end="url(#arr)"/>
+  <path d="M630,418 V364" class="line" marker-end="url(#arr)"/>
+  <text x="552" y="396" class="xs" text-anchor="end">asks each slot</text>
+  <text x="638" y="396" class="xs">HTML</text>
+
+  <!-- Sandbox -->
+  <rect x="70" y="420" width="660" height="190" rx="14" fill="#eef4fc" stroke="#4f7fc0" stroke-width="1.6" stroke-dasharray="7 5"/>
+  <text x="88" y="448"><tspan font-size="14" font-weight="700" fill="#2c5a97">wasmtime sandbox</tspan><tspan class="xs"> · a fresh instance per request · budgets for calls, time, CPU, memory</tspan></text>
+
+  <g>
+    <rect x="86" y="464" width="148" height="128" rx="10" fill="#ffffff" stroke="#b9cde8"/>
+    <text x="100" y="494" class="m">booking-grid</text>
+    <text x="100" y="514" class="xs">the booking grid</text>
+    <rect x="100" y="530" width="92" height="22" rx="11" class="lep"/>
+    <text x="146" y="545" class="lept c">Leptos view!</text>
+    <text x="100" y="578" class="xs">→ HTML, inside Wasm</text>
+  </g>
+  <g>
+    <rect x="248" y="464" width="148" height="128" rx="10" fill="#ffffff" stroke="#b9cde8"/>
+    <text x="262" y="494" class="m">quick-book</text>
+    <text x="262" y="514" class="xs">one-line booking</text>
+    <rect x="262" y="530" width="92" height="22" rx="11" class="lep"/>
+    <text x="308" y="545" class="lept c">Leptos view!</text>
+    <text x="262" y="578" class="xs">→ HTML, inside Wasm</text>
+  </g>
+  <g>
+    <rect x="410" y="464" width="148" height="128" rx="10" fill="#ffffff" stroke="#b9cde8"/>
+    <text x="424" y="494" class="m">pod-admin</text>
+    <text x="424" y="514" class="xs">manage the pods</text>
+    <rect x="424" y="530" width="92" height="22" rx="11" class="lep"/>
+    <text x="470" y="545" class="lept c">Leptos view!</text>
+    <text x="424" y="578" class="xs">→ HTML, inside Wasm</text>
+  </g>
+  <g>
+    <rect x="572" y="464" width="148" height="128" rx="10" fill="#ffffff" stroke="#b9cde8"/>
+    <text x="586" y="494" class="m">pod-stats</text>
+    <text x="586" y="514" class="xs">the "how busy" widget</text>
+    <rect x="586" y="530" width="92" height="22" rx="11" class="lep"/>
+    <text x="632" y="545" class="lept c">Leptos view!</text>
+    <text x="586" y="578" class="xs">→ HTML, inside Wasm</text>
+  </g>
+
+  <!-- Sandbox <-> platform APIs -->
+  <path d="M400,612 V648" class="line" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="412" y="634" class="xs">WIT calls: only what the app's app.toml grants</text>
+
+  <rect x="70" y="650" width="660" height="64" rx="10" class="box"/>
+  <text x="88" y="677" class="b">Platform APIs + business rules</text>
+  <text x="88" y="699" class="xs">pods · bookings · identity · log — one booking per pod and hour; cancel only your own</text>
+
+  <path d="M400,714 V744" class="line" marker-start="url(#arr)" marker-end="url(#arr)"/>
+
+  <rect x="70" y="746" width="660" height="60" rx="10" class="box"/>
+  <text x="88" y="772" class="b">SQLite</text>
+  <text x="88" y="793" class="xs">pods · bookings · app versions with their wasm · events · usage</text>
+
+  <!-- App versions -->
+  <rect x="760" y="290" width="200" height="160" rx="10" class="box"/>
+  <text x="778" y="318" class="b">App versions</text>
+  <text x="778" y="342" class="xs">deploy · review · rollback</text>
+  <text x="778" y="366" class="xs">refuses imports the</text>
+  <text x="778" y="384" class="xs">manifest doesn't grant</text>
+  <text x="778" y="408" class="xs">rolls back a version that</text>
+  <text x="778" y="426" class="xs">fails 5 requests in a minute</text>
+
+  <path d="M860,450 V776 H734" class="line" marker-end="url(#arr)"/>
+  <path d="M860,515 H734" class="line" marker-end="url(#arr)"/>
+  <text x="797" y="507" class="xs c">live version</text>
+  <text x="797" y="768" class="xs c">stores the wasm</text>
+
+  <!-- Deploy and HTTP -->
+  <path d="M120,196 V288" class="line" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="132" y="217" class="xs">HTTP</text>
+  <path d="M860,194 V288" class="line" marker-end="url(#arr)"/>
+  <text x="872" y="217" class="xs">roomer deploy: app.toml + app.wasm</text>
+
+  <!-- Review -->
+  <path d="M960,330 H1078" class="gline" marker-end="url(#arrg)"/>
+  <text x="1035" y="322" class="xs c">each version</text>
+  <path d="M1080,420 H962" class="gline" marker-end="url(#arrg)"/>
+  <text x="1035" y="412" class="xs c">verdict</text>
+
+  <rect x="1080" y="290" width="280" height="330" rx="14" fill="#eef7f0" stroke="#3f8f57" stroke-width="1.6"/>
+  <text x="1100" y="326" font-size="22" font-weight="700" fill="#24683a">appfuzz</text>
+  <text x="1100" y="350" class="s">reviews every version</text>
+  <text x="1100" y="370" class="s">before it goes live</text>
+  <text x="1100" y="402" class="xs">• the same WIT contract as the shell</text>
+  <text x="1100" y="422" class="xs">• simulated platform APIs</text>
+  <text x="1100" y="442" class="xs">• fuzzed: crashes, n+1, budgets,</text>
+  <text x="1100" y="460" class="xs">   leaks, injections, …</text>
+
+  <rect x="1098" y="482" width="244" height="30" rx="8" fill="#dff1e4" stroke="#6fb283"/>
+  <text x="1112" y="502" font-size="13"><tspan font-weight="700" fill="#24683a">pass</tspan><tspan fill="#1c1c21"> → live</tspan></text>
+  <rect x="1098" y="522" width="244" height="30" rx="8" fill="#fdf1d8" stroke="#d9a640"/>
+  <text x="1112" y="542" font-size="13"><tspan font-weight="700" fill="#8a5d00">warn</tspan><tspan fill="#1c1c21"> → live, flagged for a look</tspan></text>
+  <rect x="1098" y="562" width="244" height="30" rx="8" fill="#fbe3e1" stroke="#d0675d"/>
+  <text x="1112" y="582" font-size="13"><tspan font-weight="700" fill="#a3302a">fail</tspan><tspan fill="#1c1c21"> → refused; old version stays</tspan></text>
+
+  <!-- Leptos note -->
+  <rect x="1080" y="660" width="280" height="150" rx="14" fill="#fdf3f0" stroke="#e0907f" stroke-width="1.4"/>
+  <text x="1100" y="690" class="b" font-size="15">Leptos, in two places</text>
+  <text x="1100" y="714" class="xs">1  natively, for the shell's own pages</text>
+  <text x="1100" y="734" class="xs">2  inside each app's sandbox,</text>
+  <text x="1100" y="752" class="xs">    rendered on the server</text>
+  <text x="1100" y="776" class="xs">The browser gets plain HTML:</text>
+  <text x="1100" y="794" class="xs">no app code, no Wasm, no islands.</text>
+
+  <!-- Legend -->
+  <rect x="60" y="860" width="26" height="16" rx="4" fill="#eef4fc" stroke="#4f7fc0" stroke-dasharray="4 3"/>
+  <text x="96" y="873" class="xs">sandbox: an app gets only the platform calls its manifest grants</text>
+  <rect x="540" y="860" width="26" height="16" rx="8" class="lep"/>
+  <text x="576" y="873" class="xs">Leptos view!: HTML rendering, text escaped by default</text>
+  <rect x="960" y="860" width="26" height="16" rx="4" fill="#eef7f0" stroke="#3f8f57"/>
+  <text x="996" y="873" class="xs">appfuzz: the review, no code reading</text>
+  <text x="60" y="915" class="xs">AppOS is the architecture; Roomer, a pod-booking site, is the example; appfuzz is the review.</text>
+</svg>
