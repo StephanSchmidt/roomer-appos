@@ -1,7 +1,7 @@
 //! Pod stats: a widget next to the booking grid showing how busy each pod is.
 
-use appos_sdk::{App, Request, Response, bookings_read, fragment, param, pods_read};
-use maud::html;
+use appos_sdk::{App, Request, Response, bookings_read, fragment, param, pods_read, render};
+use leptos::prelude::*;
 
 struct PodStats;
 
@@ -17,22 +17,25 @@ impl App for PodStats {
         let total = pods.len() * hours;
         let busy = if total == 0 { 0 } else { bookings.len() * 100 / total };
 
-        let body = html! {
-            div.widget {
-                h2 { "How busy is it?" }
-                p.big-number { (busy) "%" span.muted { " booked" } }
-                ul.pod-stats {
-                    @for pod in &pods {
-                        @let n = bookings.iter().filter(|b| b.pod_id == pod.id).count();
-                        li {
-                            div.pod-stat-head { span { (pod.name) } span.muted { (n) "/" (hours) } }
-                            progress value=(n) max=(hours) {}
-                        }
-                    }
-                }
+        fragment(render(|| {
+            view! {
+                <div class="widget">
+                    <h2>"How busy is it?"</h2>
+                    <p class="big-number">{busy}"%"<span class="muted">" booked"</span></p>
+                    <ul class="pod-stats">
+                        {pods.into_iter().map(|pod| {
+                            let n = bookings.iter().filter(|b| b.pod_id == pod.id).count();
+                            view! {
+                                <li>
+                                    <div class="pod-stat-head"><span>{pod.name}</span><span class="muted">{n}"/"{hours}</span></div>
+                                    <progress value=n max=hours></progress>
+                                </li>
+                            }
+                        }).collect_view()}
+                    </ul>
+                </div>
             }
-        };
-        fragment(body.into_string())
+        }))
     }
 }
 

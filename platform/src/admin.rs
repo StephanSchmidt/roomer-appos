@@ -5,7 +5,7 @@
 //! and the access policy are one click away.
 
 use chrono::NaiveDateTime;
-use maud::{Markup, html};
+use leptos::prelude::*;
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::db::User;
@@ -161,7 +161,7 @@ fn short_author(author: &str) -> String {
     }
 }
 
-pub fn page(db: &Connection, policy: &Policy, user: &User, view: Option<&str>, error: Option<&str>) -> Markup {
+pub fn page(db: &Connection, policy: &Policy, user: &User, view: Option<&str>, error: Option<&str>) -> String {
     let view = match view {
         Some("activity") => "activity",
         Some("access") => "access",
@@ -182,69 +182,76 @@ pub fn page(db: &Connection, policy: &Policy, user: &User, view: Option<&str>, e
         v => format!("/admin/apps?view={v}"),
     };
 
-    let body = html! {
-        div #admin hx-get=(refresh) hx-trigger="every 3s" hx-select="#admin" hx-swap="outerHTML" {
-            header.page-header {
-                h1 { "Apps in Roomer" }
-                p.subtitle { (headline) }
-            }
-            nav.tabs aria-label="Apps in Roomer" {
-                a href="/admin/apps" aria-current=[(view == "apps").then_some("page")] { "Apps" }
-                a href="/admin/apps?view=activity" aria-current=[(view == "activity").then_some("page")] { "Activity" }
-                a href="/admin/apps?view=access" aria-current=[(view == "access").then_some("page")] { "Access" }
-            }
-            @if let Some(e) = error { p.error { (e) } }
-            @match view {
-                "activity" => {
-                    section.card aria-label="Activity" { (event_table(&events)) }
-                }
-                "access" => { (access_policy(policy)) }
-                _ => {
-                    @if !problems.is_empty() { (needs_you(&all, &problems)) }
-                    (app_strip(&all))
-                    (live_apps(&all, &events, &crate::usage::last_hour_by_app(db)))
-                    section.activity aria-labelledby="recent" {
-                        div.section-head {
-                            h2 #recent { "Recent activity" }
-                            a href="/admin/apps?view=activity" { "All activity" }
-                        }
-                        div.card { (event_table(&events[..events.len().min(RECENT_EVENTS)])) }
-                    }
-                }
-            }
+    let content = match view {
+        "activity" => view! { <section class="card" aria-label="Activity">{event_table(&events)}</section> }.into_any(),
+        "access" => access_policy(policy),
+        _ => view! {
+            {(!problems.is_empty()).then(|| needs_you(&all, &problems))}
+            {app_strip(&all)}
+            {live_apps(&all, &events, &crate::usage::last_hour_by_app(db))}
+            <section class="activity" aria-labelledby="recent">
+                <div class="section-head">
+                    <h2 id="recent">"Recent activity"</h2>
+                    <a href="/admin/apps?view=activity">"All activity"</a>
+                </div>
+                <div class="card">{event_table(&events[..events.len().min(RECENT_EVENTS)])}</div>
+            </section>
         }
+        .into_any(),
     };
-    views::layout("Apps in Roomer", Some(user), "/admin/apps", body, vec![])
+    let current = |tab: &str| (view == tab).then_some("page");
+    let body = view! {
+        <div id="admin" hx-get=refresh hx-trigger="every 3s" hx-select="#admin" hx-swap="outerHTML">
+            <header class="page-header">
+                <h1>"Apps in Roomer"</h1>
+                <p class="subtitle">{headline}</p>
+            </header>
+            <nav class="tabs" aria-label="Apps in Roomer">
+                <a href="/admin/apps" aria-current=current("apps")>"Apps"</a>
+                <a href="/admin/apps?view=activity" aria-current=current("activity")>"Activity"</a>
+                <a href="/admin/apps?view=access" aria-current=current("access")>"Access"</a>
+            </nav>
+            {error.map(|e| view! { <p class="error">{e.to_string()}</p> })}
+            {content}
+        </div>
+    };
+    views::layout("Apps in Roomer", Some(user), "/admin/apps", body.into_any(), vec![])
 }
 
 /// Problems since they were last marked as seen.
-fn needs_you(all: &[Version], problems: &[Problem]) -> Markup {
-    html! {
-        section.needs-you aria-labelledby="needs-you" {
-            h2 #needs-you { "Needs a look" }
-            div.problems {
-                ul {
-                    @for p in problems {
-                        li {
-                            span.problem-mark aria-hidden="true" { "!" }
-                            span.problem-text {
-                                strong { (problem_title(&p.latest.kind, p.count)) }
-                                " " (app_name(all, &p.latest.app_id)) " v" (p.latest.version) ". "
-                                span.muted { (p.latest.message) }
-                            }
-                            span.problem-when { (ago(&p.latest.at)) }
-                            @if matches!(p.latest.kind.as_str(), "over-budget" | "crashed" | "failed") {
-                                a href=(format!("/admin/usage/{}", p.latest.app_id)) { "Usage" }
-                            }
-                        }
-                    }
-                }
-                form method="post" action="/admin/seen" {
-                    button.btn.small type="submit" { "Mark as seen" }
-                }
+fn needs_you(all: &[Version], problems: &[Problem]) -> AnyView {
+    let items = problems
+        .iter()
+        .map(|p| {
+            let e = p.latest;
+            let usage = matches!(e.kind.as_str(), "over-budget" | "crashed" | "failed")
+                .then(|| view! { <a href=format!("/admin/usage/{}", e.app_id)>"Usage"</a> });
+            view! {
+                <li>
+                    <span class="problem-mark" aria-hidden="true">"!"</span>
+                    <span class="problem-text">
+                        <strong>{problem_title(&e.kind, p.count)}</strong>
+                        {format!(" {} v{}. ", app_name(all, &e.app_id), e.version)}
+                        <span class="muted">{e.message.clone()}</span>
+                    </span>
+                    <span class="problem-when">{ago(&e.at)}</span>
+                    {usage}
+                </li>
             }
-        }
+        })
+        .collect_view();
+    view! {
+        <section class="needs-you" aria-labelledby="needs-you">
+            <h2 id="needs-you">"Needs a look"</h2>
+            <div class="problems">
+                <ul>{items}</ul>
+                <form method="post" action="/admin/seen">
+                    <button class="btn small" type="submit">"Mark as seen"</button>
+                </form>
+            </div>
+        </section>
     }
+    .into_any()
 }
 
 fn problem_title(kind: &str, count: usize) -> String {
@@ -279,9 +286,14 @@ fn icon(app_id: &str) -> &'static str {
     }
 }
 
+/// "1 app", "3 versions".
+fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 /// Every app as an icon, like a Finder window: live apps first, then the
 /// ones with nothing live, greyed. An icon jumps to the app's row.
-fn app_strip(all: &[Version]) -> Markup {
+fn app_strip(all: &[Version]) -> AnyView {
     let mut apps: Vec<(&Version, Option<&Version>)> = Vec::new();
     for v in all {
         if !apps.iter().any(|(a, _)| a.app_id == v.app_id) {
@@ -292,40 +304,45 @@ fn app_strip(all: &[Version]) -> Markup {
     apps.sort_by_key(|(v, live)| (live.is_none(), v.name.to_lowercase()));
     let live = apps.iter().filter(|(_, l)| l.is_some()).count();
 
-    html! {
-        section.app-strip aria-label="Apps" {
-            div.app-strip-head {
-                strong { (apps.len()) @if apps.len() == 1 { " app" } @else { " apps" } }
-                @if !apps.is_empty() { span.muted { "· " (live) " live" } }
-            }
-            @if apps.is_empty() {
-                p.muted.app-strip-empty { "No app is deployed." }
-            } @else {
-                div.app-icons {
-                    @for (v, current) in &apps {
-                        @let description = current.and_then(|c| c.manifest.as_ref()).map(|m| m.app.description.as_str()).unwrap_or("");
-                        a.app-icon.app-icon-off[current.is_none()] href=(format!("#app-{}", v.app_id)) title=(description) {
-                            span.app-icon-glyph {
-                                svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
-                                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" {
-                                    path d=(icon(&v.app_id)) {}
-                                }
-                                @match current {
-                                    Some(c) => span.app-icon-tag { "v" (c.version) },
-                                    None => span.app-icon-tag { "off" },
-                                }
-                            }
-                            span.app-icon-name { (v.name) }
-                        }
-                    }
+    let icons = if apps.is_empty() {
+        view! { <p class="muted app-strip-empty">"No app is deployed."</p> }.into_any()
+    } else {
+        let icons = apps
+            .iter()
+            .map(|(v, current)| {
+                let description = current.and_then(|c| c.manifest.as_ref()).map(|m| m.app.description.clone()).unwrap_or_default();
+                let class = if current.is_none() { "app-icon app-icon-off" } else { "app-icon" };
+                let tag = current.map_or_else(|| "off".to_string(), |c| format!("v{}", c.version));
+                view! {
+                    <a class=class href=format!("#app-{}", v.app_id) title=description>
+                        <span class="app-icon-glyph">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
+                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d=icon(&v.app_id)></path>
+                            </svg>
+                            <span class="app-icon-tag">{tag}</span>
+                        </span>
+                        <span class="app-icon-name">{v.name.clone()}</span>
+                    </a>
                 }
-            }
-        }
+            })
+            .collect_view();
+        view! { <div class="app-icons">{icons}</div> }.into_any()
+    };
+    view! {
+        <section class="app-strip" aria-label="Apps">
+            <div class="app-strip-head">
+                <strong>{plural(apps.len(), "app", "apps")}</strong>
+                {(!apps.is_empty()).then(|| view! { <span class="muted">{format!("· {live} live")}</span> })}
+            </div>
+            {icons}
+        </section>
     }
+    .into_any()
 }
 
 /// One row per app: what is live, where it shows, what it may do.
-fn live_apps(all: &[Version], events: &[Event], usage: &crate::usage::LastHour) -> Markup {
+fn live_apps(all: &[Version], events: &[Event], usage: &crate::usage::LastHour) -> AnyView {
     let mut app_ids: Vec<(&str, &str)> = Vec::new();
     for v in all {
         if !app_ids.iter().any(|(id, _)| *id == v.app_id) {
@@ -334,61 +351,72 @@ fn live_apps(all: &[Version], events: &[Event], usage: &crate::usage::LastHour) 
     }
     app_ids.sort_by_key(|(_, name)| name.to_lowercase());
 
-    html! {
-        section.live-apps aria-labelledby="live-apps" {
-            div.section-head { h2 #live-apps { "Apps" } }
-            @if app_ids.is_empty() {
-                div.card { p.muted { "No apps deployed yet. Run " code { "make deploy" } "." } }
-            } @else {
-                div.card.app-list {
-                    div.app-row.app-row-head aria-hidden="true" {
-                        span { "App" } span { "Where" } span { "May" } span { "Last hour" } span { "Last change" } span {}
-                    }
-                    @for (app_id, name) in &app_ids {
-                        @let history: Vec<&Version> = all.iter().filter(|v| v.app_id == *app_id).collect();
-                        @let current = history.iter().copied().find(|v| v.status == "active");
-                        @let last = events.iter().find(|e| e.app_id == *app_id && DEPLOYS.contains(&e.kind.as_str()));
-                        @let back_to = current.and_then(|c| history.iter().copied().find(|v| v.status == "retired" && v.id < c.id));
-                        div.app id=(format!("app-{app_id}")) {
-                            div.app-row {
-                                div.app-name {
-                                    strong { (name) }
-                                    @match current {
-                                        Some(c) => {
-                                            span.badge.badge-active { "v" (c.version) " live" }
-                                            (review_badge(c.review.as_ref()))
-                                        }
-                                        None => span.badge.badge-retired { "not live" },
-                                    }
-                                }
-                                div { @if let Some(m) = current.and_then(|c| c.manifest.as_ref()) { (slots(m)) } }
-                                div.caps.small {
-                                    @if let Some(c) = current { @for g in by_risk(grants(c)) { (cap_chip(&g)) } }
-                                }
-                                div { (usage.sparkline(app_id)) }
-                                div.last-change {
-                                    @if let Some(e) = last {
-                                        span { (change_text(e)) } span.muted { (ago(&e.at)) }
-                                    }
-                                }
-                                div.app-actions {
-                                    @if let Some(v) = back_to {
-                                        form method="post" action=(format!("/admin/apps/{}/{}/activate", v.app_id, v.version)) {
-                                            button.btn.small type="submit" { "Roll back to v" (v.version) }
-                                        }
-                                    }
-                                }
-                            }
-                            details.history id=(format!("history-{app_id}")) hx-preserve {
-                                summary { (history.len()) @if history.len() == 1 { " version" } @else { " versions" } }
-                                (version_history(&history, current))
-                            }
-                        }
-                    }
-                }
-            }
+    if app_ids.is_empty() {
+        return view! {
+            <section class="live-apps" aria-labelledby="live-apps">
+                <div class="section-head"><h2 id="live-apps">"Apps"</h2></div>
+                <div class="card"><p class="muted">"No apps deployed yet. Run "<code>"make deploy"</code>"."</p></div>
+            </section>
         }
+        .into_any();
     }
+    let rows = app_ids
+        .iter()
+        .map(|(app_id, name)| {
+            let history: Vec<&Version> = all.iter().filter(|v| v.app_id == *app_id).collect();
+            let current = history.iter().copied().find(|v| v.status == "active");
+            let last = events.iter().find(|e| e.app_id == *app_id && DEPLOYS.contains(&e.kind.as_str()));
+            let back_to = current.and_then(|c| history.iter().copied().find(|v| v.status == "retired" && v.id < c.id));
+            let live = match current {
+                Some(c) => view! {
+                    <span class="badge badge-active">{format!("v{} live", c.version)}</span>
+                    {review_badge(c.review.as_ref())}
+                }
+                .into_any(),
+                None => view! { <span class="badge badge-retired">"not live"</span> }.into_any(),
+            };
+            let chips = current.map(|c| by_risk(grants(c)).iter().map(|g| cap_chip(g)).collect_view());
+            let last = last.map(|e| view! { <span>{change_text(e)}</span><span class="muted">{ago(&e.at)}</span> });
+            let roll_back = back_to.map(|v| {
+                view! {
+                    <form method="post" action=format!("/admin/apps/{}/{}/activate", v.app_id, v.version)>
+                        <button class="btn small" type="submit">{format!("Roll back to v{}", v.version)}</button>
+                    </form>
+                }
+            });
+            view! {
+                <div class="app" id=format!("app-{app_id}")>
+                    <div class="app-row">
+                        <div class="app-name">
+                            <strong>{name.to_string()}</strong>
+                            {live}
+                        </div>
+                        <div>{current.and_then(|c| c.manifest.as_ref()).map(slots)}</div>
+                        <div class="caps small">{chips}</div>
+                        <div>{usage.sparkline(app_id)}</div>
+                        <div class="last-change">{last}</div>
+                        <div class="app-actions">{roll_back}</div>
+                    </div>
+                    <details class="history" id=format!("history-{app_id}") hx-preserve="">
+                        <summary>{plural(history.len(), "version", "versions")}</summary>
+                        {version_history(&history, current)}
+                    </details>
+                </div>
+            }
+        })
+        .collect_view();
+    view! {
+        <section class="live-apps" aria-labelledby="live-apps">
+            <div class="section-head"><h2 id="live-apps">"Apps"</h2></div>
+            <div class="card app-list">
+                <div class="app-row app-row-head" aria-hidden="true">
+                    <span>"App"</span><span>"Where"</span><span>"May"</span><span>"Last hour"</span><span>"Last change"</span><span></span>
+                </div>
+                {rows}
+            </div>
+        </section>
+    }
+    .into_any()
 }
 
 /// A deploy event as a short line for the "Last change" column.
@@ -413,43 +441,45 @@ fn change_text(e: &Event) -> String {
 }
 
 /// Every version of one app, newest first, with what it changed.
-fn version_history(history: &[&Version], current: Option<&Version>) -> Markup {
-    html! {
-        ol.version-list {
-            @for (i, v) in history.iter().enumerate() {
-                // Compare with the next older version that got past the sandbox.
-                @let before = history[i + 1..].iter().copied().find(|o| o.status != "refused");
-                li class=(format!("row-{}", v.status)) {
-                    span.mono { "v" (v.version) }
-                    (status_badge(&v.status))
-                    span.version-change {
-                        (version_change(v, before))
-                        @if matches!(v.status.as_str(), "refused" | "failed") {
-                            @if let Some(r) = &v.reason { span.refusal { (r) } }
-                        }
-                        (review_detail(v))
-                        @if v.status == "refused" {
-                            @let used = crate::runtime::used_capabilities(&v.imports);
-                            @if !used.is_empty() { span.muted.small-text { "Code actually uses: " (used.join(", ")) } }
-                        }
-                    }
-                    span.muted {
-                        (short_author(&v.author))
-                        @if !v.author.starts_with(&v.deployed_by) { " via " (v.deployed_by) }
-                        ", " (ago(&v.deployed_at))
-                    }
-                    span.app-actions {
-                        @if matches!(v.status.as_str(), "retired" | "pending") {
-                            form method="post" action=(format!("/admin/apps/{}/{}/activate", v.app_id, v.version)) {
-                                @let older = current.is_some_and(|c| v.id < c.id);
-                                button.btn.small type="submit" { @if older { "Roll back to this" } @else { "Make live again" } }
-                            }
-                        }
-                    }
+fn version_history(history: &[&Version], current: Option<&Version>) -> AnyView {
+    let rows = history
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            // Compare with the next older version that got past the sandbox.
+            let before = history[i + 1..].iter().copied().find(|o| o.status != "refused");
+            let refusal = (matches!(v.status.as_str(), "refused" | "failed"))
+                .then(|| v.reason.clone().map(|r| view! { <span class="refusal">{r}</span> }));
+            let used = if v.status == "refused" { crate::runtime::used_capabilities(&v.imports) } else { vec![] };
+            let used = (!used.is_empty())
+                .then(|| view! { <span class="muted small-text">{format!("Code actually uses: {}", used.join(", "))}</span> });
+            let via = if v.author.starts_with(&v.deployed_by) { String::new() } else { format!(" via {}", v.deployed_by) };
+            let who = format!("{}{via}, {}", short_author(&v.author), ago(&v.deployed_at));
+            let activate = matches!(v.status.as_str(), "retired" | "pending").then(|| {
+                let older = current.is_some_and(|c| v.id < c.id);
+                view! {
+                    <form method="post" action=format!("/admin/apps/{}/{}/activate", v.app_id, v.version)>
+                        <button class="btn small" type="submit">{if older { "Roll back to this" } else { "Make live again" }}</button>
+                    </form>
                 }
+            });
+            view! {
+                <li class=format!("row-{}", v.status)>
+                    <span class="mono">{format!("v{}", v.version)}</span>
+                    {status_badge(&v.status)}
+                    <span class="version-change">
+                        {version_change(v, before)}
+                        {refusal}
+                        {review_detail(v)}
+                        {used}
+                    </span>
+                    <span class="muted">{who}</span>
+                    <span class="app-actions">{activate}</span>
+                </li>
             }
-        }
-    }
+        })
+        .collect_view();
+    view! { <ol class="version-list">{rows}</ol> }.into_any()
 }
 
 /// What a version changed compared with the one before it.
@@ -469,73 +499,81 @@ fn version_change(v: &Version, before: Option<&Version>) -> String {
     if parts.is_empty() { "Same permissions".into() } else { parts.join(", ") }
 }
 
-fn event_table(events: &[Event]) -> Markup {
-    html! {
-        @if events.is_empty() {
-            p.muted { "Nothing yet." }
-        } @else {
-            table.events {
-                tbody {
-                    @for e in events {
-                        tr {
-                            td.muted.nowrap { (ago(&e.at)) }
-                            td { (event_badge(&e.kind)) }
-                            td.mono.nowrap { (e.app_id) " v" (e.version) }
-                            td { (e.message) }
-                        }
-                    }
-                }
-            }
-        }
+fn event_table(events: &[Event]) -> AnyView {
+    if events.is_empty() {
+        return view! { <p class="muted">"Nothing yet."</p> }.into_any();
     }
+    let rows = events
+        .iter()
+        .map(|e| {
+            view! {
+                <tr>
+                    <td class="muted nowrap">{ago(&e.at)}</td>
+                    <td>{event_badge(&e.kind)}</td>
+                    <td class="mono nowrap">{format!("{} v{}", e.app_id, e.version)}</td>
+                    <td>{e.message.clone()}</td>
+                </tr>
+            }
+        })
+        .collect_view();
+    view! { <table class="events"><tbody>{rows}</tbody></table> }.into_any()
 }
 
 /// Who may use which capability. Admins inherit everything members may do.
-fn access_policy(policy: &Policy) -> Markup {
+fn access_policy(policy: &Policy) -> AnyView {
     let rules = policy.role_rules();
     let has = |role: &str, cap: &str| rules.iter().any(|(r, c)| r == role && c == cap);
-    html! {
-        div.card {
-            p.muted {
+    let mark = |yes: bool| {
+        if yes {
+            view! { <span class="yes">"✓"</span> }.into_any()
+        } else {
+            view! { <span class="no">"—"</span> }.into_any()
+        }
+    };
+    let rows = CAPABILITIES
+        .iter()
+        .map(|(cap, text)| {
+            view! {
+                <tr>
+                    <td>{cap_chip(cap)}<span class="muted">{format!(" {text}")}</span></td>
+                    <td class="muted nowrap">{risk(cap).label()}</td>
+                    <td>{mark(has("member", cap))}</td>
+                    <td>{mark(has("member", cap) || has("admin", cap))}</td>
+                </tr>
+            }
+        })
+        .collect_view();
+    view! {
+        <div class="card">
+            <p class="muted">
                 "Casbin checks every platform call: the app must be granted the capability by an approved manifest, "
                 "and the signed-in user's role must allow it."
-            }
-            table.policy {
-                thead { tr { th { "Capability" } th { "Risk" } th { "member" } th { "admin" } } }
-                tbody {
-                    @for (cap, text) in CAPABILITIES {
-                        tr {
-                            td { (cap_chip(cap)) span.muted { " " (text) } }
-                            td.muted.nowrap { (risk(cap).label()) }
-                            td { @if has("member", cap) { span.yes { "✓" } } @else { span.no { "—" } } }
-                            td { @if has("member", cap) || has("admin", cap) { span.yes { "✓" } } @else { span.no { "—" } } }
-                        }
-                    }
-                }
-            }
-            details.policy-raw {
-                summary { "Casbin policy" }
-                pre { code { (policy.dump()) } }
-            }
-        }
+            </p>
+            <table class="policy">
+                <thead><tr><th>"Capability"</th><th>"Risk"</th><th>"member"</th><th>"admin"</th></tr></thead>
+                <tbody>{rows}</tbody>
+            </table>
+            <details class="policy-raw">
+                <summary>"Casbin policy"</summary>
+                <pre><code>{policy.dump()}</code></pre>
+            </details>
+        </div>
     }
+    .into_any()
 }
 
 /// Where the app shows up.
-fn slots(m: &Manifest) -> Markup {
-    html! {
-        p.slots {
-            @for r in &m.slots.routes { span.slot { "page " code { (r) } } }
-            @for w in &m.slots.widgets { span.slot { "widget " code { (w) } } }
-            @if let Some(label) = &m.slots.nav { span.slot { "nav " strong { (label) } } }
-        }
-    }
+fn slots(m: &Manifest) -> AnyView {
+    let routes = m.slots.routes.iter().map(|r| view! { <span class="slot">"page "<code>{r.clone()}</code></span> }).collect_view();
+    let widgets = m.slots.widgets.iter().map(|w| view! { <span class="slot">"widget "<code>{w.clone()}</code></span> }).collect_view();
+    let nav = m.slots.nav.clone().map(|label| view! { <span class="slot">"nav "<strong>{label}</strong></span> });
+    view! { <p class="slots">{routes}{widgets}{nav}</p> }.into_any()
 }
 
 /// A capability as a pill coloured by how much harm it can do.
-fn cap_chip(cap: &str) -> Markup {
+fn cap_chip(cap: &str) -> AnyView {
     let r = risk(cap);
-    html! { span class=(format!("chip {}", r.class())) title=(format!("{}. {}", describe(cap), r.label())) { (cap) } }
+    view! { <span class=format!("chip {}", r.class()) title=format!("{}. {}", describe(cap), r.label())>{cap.to_string()}</span> }.into_any()
 }
 
 /// Riskiest capabilities first, so they are what the eye lands on.
@@ -545,36 +583,44 @@ fn by_risk(mut caps: Vec<String>) -> Vec<String> {
 }
 
 /// The review verdict of a live version.
-fn review_badge(review: Option<&crate::review::Review>) -> Markup {
+fn review_badge(review: Option<&crate::review::Review>) -> AnyView {
+    let summary = review.map(|r| r.summary()).unwrap_or_default();
     match review.map(|r| r.verdict.as_str()) {
-        None => html! { span.badge.badge-retired title="Installed before app review; deploy it to review it" { "not reviewed" } },
-        Some("pass") => html! { span.badge.badge-active { "review passed" } },
-        Some("warn") => html! { span.badge.badge-pending title=(review.map(|r| r.summary()).unwrap_or_default()) { "review warns" } },
-        Some(_) => html! { span.badge.badge-refused title=(review.map(|r| r.summary()).unwrap_or_default()) { "review failed" } },
+        None => view! { <span class="badge badge-retired" title="Installed before app review; deploy it to review it">"not reviewed"</span> }
+            .into_any(),
+        Some("pass") => view! { <span class="badge badge-active">"review passed"</span> }.into_any(),
+        Some("warn") => view! { <span class="badge badge-pending" title=summary>"review warns"</span> }.into_any(),
+        Some(_) => view! { <span class="badge badge-refused" title=summary>"review failed"</span> }.into_any(),
     }
 }
 
 /// What app review found in a version.
-fn review_detail(v: &Version) -> Markup {
-    html! {
-        @match &v.review {
-            None => @if v.deployed_by == "roomer" { span.muted.small-text { "Came with Roomer, installed before app review" } },
-            Some(r) => {
-                span.muted.small-text { "App review: " (r.verdict) ", " (r.runs) " runs" }
-                @if !r.findings.is_empty() {
-                    ul.review-findings {
-                        @for f in &r.findings {
-                            li { span class=(format!("badge badge-{}", if f.severity == "fail" { "refused" } else { "pending" })) { (f.severity) } " " code { (f.kind) } " " (f.title) }
-                        }
-                    }
-                }
-                span.muted.small-text { "Details: " code { "appfuzz explain" } " in " code { (r.dir) } }
-            }
-        }
+fn review_detail(v: &Version) -> AnyView {
+    let Some(r) = &v.review else {
+        return (v.deployed_by == "roomer")
+            .then(|| view! { <span class="muted small-text">"Came with Roomer, installed before app review"</span> })
+            .into_any();
+    };
+    let findings = (!r.findings.is_empty()).then(|| {
+        let items = r
+            .findings
+            .iter()
+            .map(|f| {
+                let class = format!("badge badge-{}", if f.severity == "fail" { "refused" } else { "pending" });
+                view! { <li><span class=class>{f.severity.clone()}</span>" "<code>{f.kind.clone()}</code>{format!(" {}", f.title)}</li> }
+            })
+            .collect_view();
+        view! { <ul class="review-findings">{items}</ul> }
+    });
+    view! {
+        <span class="muted small-text">{format!("App review: {}, {} runs", r.verdict, r.runs)}</span>
+        {findings}
+        <span class="muted small-text">"Details: "<code>"appfuzz explain"</code>" in "<code>{r.dir.clone()}</code></span>
     }
+    .into_any()
 }
 
-fn status_badge(status: &str) -> Markup {
+fn status_badge(status: &str) -> AnyView {
     let label = match status {
         "active" => "live",
         "pending" => "not live",
@@ -584,10 +630,10 @@ fn status_badge(status: &str) -> Markup {
         "failed" => "failed",
         other => other,
     };
-    html! { span class=(format!("badge badge-{status}")) { (label) } }
+    view! { <span class=format!("badge badge-{status}")>{label.to_string()}</span> }.into_any()
 }
 
-fn event_badge(kind: &str) -> Markup {
+fn event_badge(kind: &str) -> AnyView {
     let class = match kind {
         "deployed" | "auto-approved" | "approved" => "badge-active",
         "needs-approval" => "badge-pending",
@@ -597,5 +643,5 @@ fn event_badge(kind: &str) -> Markup {
         "rolled-back" | "auto-rolled-back" => "badge-rollback",
         _ => "badge-retired",
     };
-    html! { span class=(format!("badge {class}")) { (kind) } }
+    view! { <span class=format!("badge {class}")>{kind.to_string()}</span> }.into_any()
 }

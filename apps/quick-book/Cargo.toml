@@ -10,5 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 appos-sdk.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["alloc"] }
-maud.workspace = true
+leptos.workspace = true
 wit-bindgen.workspace = true

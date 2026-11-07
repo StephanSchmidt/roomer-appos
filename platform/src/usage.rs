@@ -7,7 +7,7 @@
 use std::time::Duration;
 
 use chrono::TimeZone;
-use maud::{Markup, html};
+use leptos::prelude::*;
 use rusqlite::{Connection, params};
 
 use crate::db::User;
@@ -200,7 +200,7 @@ fn f(v: f64) -> String {
 
 /// Where min..max sits against the budget: the band is the range, the dot
 /// the median, the tick the 95th percentile, the dashed line the limit.
-fn range_bar(s: &Summary, m: &Metric) -> Markup {
+fn range_bar(s: &Summary, m: &Metric) -> AnyView {
     let scale = m.limit.unwrap_or(0.0).max(s.max).max(f64::MIN_POSITIVE);
     let (w, x0) = (232.0, 4.0);
     let x = |v: f64| x0 + v / scale * w;
@@ -214,47 +214,57 @@ fn range_bar(s: &Summary, m: &Metric) -> Markup {
         m.limit.map(|l| format!(" · limit {}", num(l, 0))).unwrap_or_default(),
         m.unit
     );
-    html! {
-        svg.viz.range viewBox="0 0 240 22" width="240" height="22" role="img" aria-label=(tip) {
-            title { (tip) }
-            rect.range-track x=(f(x0)) y="8" width=(f(w)) height="6" rx="3" {}
-            rect.range-band x=(f(x(s.min))) y="8" width=(f((x(s.max) - x(s.min)).max(2.0))) height="6" rx="3" {}
-            line.range-p95 x1=(f(x(s.p95))) x2=(f(x(s.p95))) y1="5" y2="17" {}
-            circle.range-median cx=(f(x(s.median))) cy="11" r="5" {}
-            @if let Some(l) = m.limit {
-                line.limit x1=(f(x(l))) x2=(f(x(l))) y1="1" y2="21" {}
-            }
-        }
+    let label = tip.clone();
+    let limit = m.limit.map(|l| view! { <line class="limit" x1=f(x(l)) x2=f(x(l)) y1="1" y2="21"></line> });
+    view! {
+        <svg class="viz range" viewBox="0 0 240 22" width="240" height="22" role="img" aria-label=label>
+            <title>{tip}</title>
+            <rect class="range-track" x=f(x0) y="8" width=f(w) height="6" rx="3"></rect>
+            <rect class="range-band" x=f(x(s.min)) y="8" width=f((x(s.max) - x(s.min)).max(2.0)) height="6" rx="3"></rect>
+            <line class="range-p95" x1=f(x(s.p95)) x2=f(x(s.p95)) y1="5" y2="17"></line>
+            <circle class="range-median" cx=f(x(s.median)) cy="11" r="5"></circle>
+            {limit}
+        </svg>
     }
+    .into_any()
 }
 
 /// The min / median / p95 / max table, one row per metric. Doubles as the
 /// table view of the range bars.
-fn metrics_table(samples: &[&Sample], io_limit: u32) -> Markup {
+fn metrics_table(samples: &[&Sample], io_limit: u32) -> AnyView {
     let ran: Vec<&&Sample> = samples.iter().filter(|s| s.ran()).collect();
-    html! {
-        table.usage-table {
-            thead {
-                tr { th { "Per request" } th.num { "min" } th.num { "median" } th.num { "p95" } th.num { "max" } th.num { "limit" } th { "range vs. limit" } }
-            }
-            tbody {
-                @for m in metrics(io_limit) {
-                    @if let Some(s) = summarize(ran.iter().map(|x| (m.value)(x))) {
-                        tr {
-                            td title=(m.hint) { (m.label) " " span.muted { (m.unit) } }
-                            td.num { (num(s.min, m.decimals)) }
-                            td.num { strong { (num(s.median, m.decimals)) } }
-                            td.num { (num(s.p95, m.decimals)) }
-                            td.num { (num(s.max, m.decimals)) }
-                            td.num.muted { @if let Some(l) = m.limit { (num(l, 0)) } @else { "—" } }
-                            td { (range_bar(&s, &m)) }
-                        }
-                    }
-                }
-            }
-        }
-        @if ran.is_empty() { p.muted { "No requests yet." } }
+    let rows = metrics(io_limit)
+        .into_iter()
+        .filter_map(|m| {
+            let s = summarize(ran.iter().map(|x| (m.value)(x)))?;
+            let limit = m.limit.map_or_else(|| "—".to_string(), |l| num(l, 0));
+            Some(view! {
+                <tr>
+                    <td title=m.hint>{m.label}" "<span class="muted">{m.unit}</span></td>
+                    <td class="num">{num(s.min, m.decimals)}</td>
+                    <td class="num"><strong>{num(s.median, m.decimals)}</strong></td>
+                    <td class="num">{num(s.p95, m.decimals)}</td>
+                    <td class="num">{num(s.max, m.decimals)}</td>
+                    <td class="num muted">{limit}</td>
+                    <td>{range_bar(&s, &m)}</td>
+                </tr>
+            })
+        })
+        .collect_view();
+    let empty = ran.is_empty().then(|| view! { <p class="muted">"No requests yet."</p> });
+    view! {
+        <table class="usage-table">
+            <thead>
+                <tr>
+                    <th>"Per request"</th><th class="num">"min"</th><th class="num">"median"</th><th class="num">"p95"</th>
+                    <th class="num">"max"</th><th class="num">"limit"</th><th>"range vs. limit"</th>
+                </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+        </table>
+        {empty}
     }
+    .into_any()
 }
 
 /// Chart widths in SVG units, matching the rendered size so text stays 11px.
@@ -268,32 +278,37 @@ const PAD_B: f64 = 26.0;
 const TIMELINE_TOP: f64 = 22.0;
 
 /// Horizontal grid lines with labels, for a y axis from 0 to `max`.
-fn y_grid(w: f64, max: f64, step: f64, h: f64, unit_decimals: usize) -> Markup {
+fn y_grid(w: f64, max: f64, step: f64, h: f64, unit_decimals: usize) -> AnyView {
     let y = |v: f64| PAD_T + (1.0 - v / max) * (h - PAD_T - PAD_B);
     let ticks: Vec<f64> = (0..).map(|i| i as f64 * step).take_while(|v| *v <= max + step / 2.0).collect();
-    html! {
-        @for t in ticks {
-            line class=(if t == 0.0 { "baseline" } else { "grid" }) x1=(f(PAD_L)) x2=(f(w - PAD_R)) y1=(f(y(t))) y2=(f(y(t))) {}
-            text.tick x=(f(PAD_L - 8.0)) y=(f(y(t) + 4.0)) text-anchor="end" { (num(t, unit_decimals)) }
-        }
-    }
+    ticks
+        .into_iter()
+        .map(|t| {
+            view! {
+                <line class={if t == 0.0 { "baseline" } else { "grid" }} x1=f(PAD_L) x2=f(w - PAD_R) y1=f(y(t)) y2=f(y(t))></line>
+                <text class="tick" x=f(PAD_L - 8.0) y=f(y(t) + 4.0) text-anchor="end">{num(t, unit_decimals)}</text>
+            }
+        })
+        .collect_view()
+        .into_any()
 }
 
-fn limit_line(w: f64, limit: f64, max: f64, h: f64) -> Markup {
+fn limit_line(w: f64, limit: f64, max: f64, h: f64) -> AnyView {
     let y = PAD_T + (1.0 - limit / max) * (h - PAD_T - PAD_B);
-    html! {
-        line.limit x1=(f(PAD_L)) x2=(f(w - PAD_R)) y1=(f(y)) y2=(f(y)) {}
-        text.limit-label x=(f(w - PAD_R)) y=(f(y - 6.0)) text-anchor="end" { "limit " (num(limit, 0)) }
+    view! {
+        <line class="limit" x1=f(PAD_L) x2=f(w - PAD_R) y1=f(y) y2=f(y)></line>
+        <text class="limit-label" x=f(w - PAD_R) y=f(y - 6.0) text-anchor="end">{format!("limit {}", num(limit, 0))}</text>
     }
+    .into_any()
 }
 
 /// I/O units of each recent request, in order, against the limit. Version
 /// changes are marked; failed requests are red.
-fn timeline(w: f64, samples: &[&Sample], limit: f64) -> Markup {
+fn timeline(w: f64, samples: &[&Sample], limit: f64) -> AnyView {
     let ran: Vec<&&Sample> = samples.iter().filter(|s| s.ran()).collect();
     let shown = &ran[ran.len().saturating_sub(TIMELINE_REQUESTS)..];
     if shown.is_empty() {
-        return html! { p.muted { "No requests yet." } };
+        return view! { <p class="muted">"No requests yet."</p> }.into_any();
     }
     let h = 260.0;
     let top = shown.iter().map(|s| s.io).fold(limit, f64::max) * 1.08;
@@ -301,27 +316,42 @@ fn timeline(w: f64, samples: &[&Sample], limit: f64) -> Markup {
     let slot_w = (w - PAD_L - PAD_R) / shown.len().max(1) as f64;
     let x = |i: usize| PAD_L + (i as f64 + 0.5) * slot_w;
     let y = |v: f64| PAD_T + (1.0 - v / max) * (h - PAD_T - PAD_B);
-    html! {
-        svg.viz viewBox=(format!("0 0 {w} {h}")) width="100%" role="img"
-            aria-label="I/O units per request, most recent requests, against the limit" {
-            (y_grid(w, max, step, h, 0))
-            @for (vx, row, version) in version_marks(shown, x, slot_w) {
-                line.version-line x1=(f(vx)) x2=(f(vx)) y1=(f(row - 10.0)) y2=(f(h - PAD_B)) {}
-                text.version-label x=(f(vx + 4.0)) y=(f(row)) { "v" (version) }
+    let marks = version_marks(shown, x, slot_w)
+        .into_iter()
+        .map(|(vx, row, version)| {
+            view! {
+                <line class="version-line" x1=f(vx) x2=f(vx) y1=f(row - 10.0) y2=f(h - PAD_B)></line>
+                <text class="version-label" x=f(vx + 4.0) y=f(row)>{format!("v{version}")}</text>
             }
-            (limit_line(w, limit, max, h))
-            @for (i, s) in shown.iter().enumerate() {
-                g.point {
-                    title { (time_of(s.at)) " · v" (s.version) " · " (s.slot) " · " (num(s.io, 0)) " I/O units · " (s.outcome) }
-                    circle.hit cx=(f(x(i))) cy=(f(y(s.io))) r="9" {}
-                    circle class=(if s.failed() { "dot dot-fail" } else { "dot" }) cx=(f(x(i))) cy=(f(y(s.io))) r="4" {}
-                }
+        })
+        .collect_view();
+    let points = shown
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let tip = format!("{} · v{} · {} · {} I/O units · {}", time_of(s.at), s.version, s.slot, num(s.io, 0), s.outcome);
+            view! {
+                <g class="point">
+                    <title>{tip}</title>
+                    <circle class="hit" cx=f(x(i)) cy=f(y(s.io)) r="9"></circle>
+                    <circle class={if s.failed() { "dot dot-fail" } else { "dot" }} cx=f(x(i)) cy=f(y(s.io)) r="4"></circle>
+                </g>
             }
-            text.tick x=(f(PAD_L)) y=(f(h - 6.0)) { "older" }
-            text.tick x=(f(w - PAD_R)) y=(f(h - 6.0)) text-anchor="end" { "latest" }
-        }
-        (legend(true))
+        })
+        .collect_view();
+    view! {
+        <svg class="viz" viewBox=format!("0 0 {w} {h}") width="100%" role="img"
+            aria-label="I/O units per request, most recent requests, against the limit">
+            {y_grid(w, max, step, h, 0)}
+            {marks}
+            {limit_line(w, limit, max, h)}
+            {points}
+            <text class="tick" x=f(PAD_L) y=f(h - 6.0)>"older"</text>
+            <text class="tick" x=f(w - PAD_R) y=f(h - 6.0) text-anchor="end">"latest"</text>
+        </svg>
+        {legend(true)}
     }
+    .into_any()
 }
 
 /// Where each version starts in the timeline: x, label baseline, version.
@@ -338,11 +368,16 @@ fn version_marks(shown: &[&&Sample], x: impl Fn(usize) -> f64, slot_w: f64) -> V
     marks
 }
 
+/// "1 request", "3 requests".
+fn requests(n: usize) -> String {
+    format!("{n} {}", if n == 1 { "request" } else { "requests" })
+}
+
 /// How the I/O units of all recorded requests are distributed.
-fn histogram(w: f64, samples: &[&Sample], limit: f64) -> Markup {
+fn histogram(w: f64, samples: &[&Sample], limit: f64) -> AnyView {
     let values: Vec<f64> = samples.iter().filter(|s| s.ran()).map(|s| s.io).collect();
     if values.is_empty() {
-        return html! { p.muted { "No requests yet." } };
+        return view! { <p class="muted">"No requests yet."</p> }.into_any();
     }
     let h = 220.0;
     let top = values.iter().copied().fold(limit, f64::max) * 1.02;
@@ -360,30 +395,46 @@ fn histogram(w: f64, samples: &[&Sample], limit: f64) -> Markup {
     let x = |v: f64| PAD_L + v / x_max * plot;
     let y = |v: f64| PAD_T + (1.0 - v / max) * (h - PAD_T - PAD_B);
     let base = y(0.0);
-    html! {
-        svg.viz viewBox=(format!("0 0 {w} {h}")) width="100%" role="img" aria-label="Distribution of I/O units per request" {
-            (y_grid(w, max, step, h, 0))
-            @for (i, &c) in counts.iter().enumerate() {
-                @let (lo, hi) = (i as f64 * bin_w, (i + 1) as f64 * bin_w);
-                @if c > 0 {
-                    g.col {
-                        title { (num(lo, 0)) "–" (num(hi - 1.0, 0)) " I/O units: " (c) @if c == 1 { " request" } @else { " requests" } }
-                        rect.hit x=(f(x(lo))) y=(f(PAD_T)) width=(f(x(hi) - x(lo))) height=(f(base - PAD_T)) {}
-                        path class=(if lo >= limit { "bar bar-fail" } else { "bar" }) d=(bar_path(x(lo) + 1.0, x(hi) - 1.0, y(c as f64), base)) {}
-                    }
-                }
+    let columns = counts
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| **c > 0)
+        .map(|(i, &c)| {
+            let (lo, hi) = (i as f64 * bin_w, (i + 1) as f64 * bin_w);
+            let tip = format!("{}–{} I/O units: {}", num(lo, 0), num(hi - 1.0, 0), requests(c));
+            view! {
+                <g class="col">
+                    <title>{tip}</title>
+                    <rect class="hit" x=f(x(lo)) y=f(PAD_T) width=f(x(hi) - x(lo)) height=f(base - PAD_T)></rect>
+                    <path class={if lo >= limit { "bar bar-fail" } else { "bar" }} d=bar_path(x(lo) + 1.0, x(hi) - 1.0, y(c as f64), base)></path>
+                </g>
             }
-            @if limit <= x_max {
-                line.limit x1=(f(x(limit))) x2=(f(x(limit))) y1=(f(PAD_T - 8.0)) y2=(f(base)) {}
-                text.limit-label x=(f(x(limit) - 6.0)) y=(f(PAD_T - 10.0)) text-anchor="end" { "limit " (num(limit, 0)) }
-            }
-            @for t in (0..).map(|i| i as f64 * x_step).take_while(|t| *t <= x_max) {
-                text.tick x=(f(x(t))) y=(f(h - 8.0)) text-anchor=(if t == 0.0 { "start" } else if t == x_max { "end" } else { "middle" }) {
-                    (num(t, 0)) @if t == x_max { " units" }
-                }
-            }
+        })
+        .collect_view();
+    let limit_mark = (limit <= x_max).then(|| {
+        view! {
+            <line class="limit" x1=f(x(limit)) x2=f(x(limit)) y1=f(PAD_T - 8.0) y2=f(base)></line>
+            <text class="limit-label" x=f(x(limit) - 6.0) y=f(PAD_T - 10.0) text-anchor="end">{format!("limit {}", num(limit, 0))}</text>
         }
+    });
+    let ticks = (0..)
+        .map(|i| i as f64 * x_step)
+        .take_while(|t| *t <= x_max)
+        .map(|t| {
+            let anchor = if t == 0.0 { "start" } else if t == x_max { "end" } else { "middle" };
+            let label = if t == x_max { format!("{} units", num(t, 0)) } else { num(t, 0) };
+            view! { <text class="tick" x=f(x(t)) y=f(h - 8.0) text-anchor=anchor>{label}</text> }
+        })
+        .collect_view();
+    view! {
+        <svg class="viz" viewBox=format!("0 0 {w} {h}") width="100%" role="img" aria-label="Distribution of I/O units per request">
+            {y_grid(w, max, step, h, 0)}
+            {columns}
+            {limit_mark}
+            {ticks}
+        </svg>
     }
+    .into_any()
 }
 
 /// A bar with 4px rounded top corners and a square foot on the baseline.
@@ -395,8 +446,13 @@ fn bar_path(x0: f64, x1: f64, top: f64, base: f64) -> String {
     )
 }
 
+/// "4 requests, 1 failed": a chart tooltip.
+fn requests_failed(total: usize, failed: usize) -> String {
+    if failed > 0 { format!("{total} requests, {failed} failed") } else { format!("{total} requests") }
+}
+
 /// Requests per minute over the last half hour, failed ones stacked on top.
-fn per_minute(w: f64, samples: &[&Sample]) -> Markup {
+fn per_minute(w: f64, samples: &[&Sample]) -> AnyView {
     let h = 200.0;
     let now = now_ms() / 60_000;
     let mut ok = vec![0usize; MINUTES as usize];
@@ -419,42 +475,56 @@ fn per_minute(w: f64, samples: &[&Sample]) -> Markup {
             .map(|t| t.format("%H:%M").to_string())
             .unwrap_or_default()
     };
-    html! {
-        svg.viz viewBox=(format!("0 0 {w} {h}")) width="100%" role="img" aria-label="Requests per minute, last 30 minutes" {
-            (y_grid(w, max, step, h, 0))
-            @for i in 0..MINUTES as usize {
-                @let (x0, x1) = (PAD_L + i as f64 * slot + 2.0, PAD_L + (i + 1) as f64 * slot - 2.0);
-                @if ok[i] + failed[i] > 0 {
-                    g.col {
-                        title { (minute(i)) " · " (ok[i] + failed[i]) " requests" @if failed[i] > 0 { ", " (failed[i]) " failed" } }
-                        rect.hit x=(f(x0)) y=(f(PAD_T)) width=(f(x1 - x0)) height=(f(base - PAD_T)) {}
-                        @if failed[i] == 0 {
-                            path.bar d=(bar_path(x0, x1, y(ok[i] as f64), base)) {}
-                        } @else {
-                            @if ok[i] > 0 { rect.bar x=(f(x0)) y=(f(y(ok[i] as f64))) width=(f(x1 - x0)) height=(f(base - y(ok[i] as f64))) {} }
-                            // 2px gap between the segments.
-                            @let seg_base = if ok[i] > 0 { y(ok[i] as f64) - 2.0 } else { base };
-                            path.bar.bar-fail d=(bar_path(x0, x1, y((ok[i] + failed[i]) as f64).min(seg_base - 1.0), seg_base)) {}
-                        }
-                    }
-                }
+    let columns = (0..MINUTES as usize)
+        .filter(|&i| ok[i] + failed[i] > 0)
+        .map(|i| {
+            let (x0, x1) = (PAD_L + i as f64 * slot + 2.0, PAD_L + (i + 1) as f64 * slot - 2.0);
+            let tip = format!("{} · {}", minute(i), requests_failed(ok[i] + failed[i], failed[i]));
+            let bars = if failed[i] == 0 {
+                view! { <path class="bar" d=bar_path(x0, x1, y(ok[i] as f64), base)></path> }.into_any()
+            } else {
+                let ok_bar = (ok[i] > 0).then(|| {
+                    view! { <rect class="bar" x=f(x0) y=f(y(ok[i] as f64)) width=f(x1 - x0) height=f(base - y(ok[i] as f64))></rect> }
+                });
+                // 2px gap between the segments.
+                let seg_base = if ok[i] > 0 { y(ok[i] as f64) - 2.0 } else { base };
+                let d = bar_path(x0, x1, y((ok[i] + failed[i]) as f64).min(seg_base - 1.0), seg_base);
+                view! { {ok_bar}<path class="bar bar-fail" d=d></path> }.into_any()
+            };
+            view! {
+                <g class="col">
+                    <title>{tip}</title>
+                    <rect class="hit" x=f(x0) y=f(PAD_T) width=f(x1 - x0) height=f(base - PAD_T)></rect>
+                    {bars}
+                </g>
             }
-            @for i in (0..MINUTES as usize).step_by(5).chain([MINUTES as usize - 1]) {
-                text.tick x=(f(PAD_L + (i as f64 + 0.5) * slot)) y=(f(h - 8.0)) text-anchor="middle" { (minute(i)) }
-            }
-        }
-        (legend(false))
+        })
+        .collect_view();
+    let ticks = (0..MINUTES as usize)
+        .step_by(5)
+        .chain([MINUTES as usize - 1])
+        .map(|i| view! { <text class="tick" x=f(PAD_L + (i as f64 + 0.5) * slot) y=f(h - 8.0) text-anchor="middle">{minute(i)}</text> })
+        .collect_view();
+    view! {
+        <svg class="viz" viewBox=format!("0 0 {w} {h}") width="100%" role="img" aria-label="Requests per minute, last 30 minutes">
+            {y_grid(w, max, step, h, 0)}
+            {columns}
+            {ticks}
+        </svg>
+        {legend(false)}
     }
+    .into_any()
 }
 
-fn legend(with_limit: bool) -> Markup {
-    html! {
-        div.legend {
-            span.legend-item { span.swatch.swatch-ok {} "Request" }
-            span.legend-item { span.swatch.swatch-fail {} "Failed: over budget, crashed or busy" }
-            @if with_limit { span.legend-item { span.swatch.swatch-limit {} "Limit" } }
-        }
+fn legend(with_limit: bool) -> AnyView {
+    view! {
+        <div class="legend">
+            <span class="legend-item"><span class="swatch swatch-ok"></span>"Request"</span>
+            <span class="legend-item"><span class="swatch swatch-fail"></span>"Failed: over budget, crashed or busy"</span>
+            {with_limit.then(|| view! { <span class="legend-item"><span class="swatch swatch-limit"></span>"Limit"</span> })}
+        </div>
     }
+    .into_any()
 }
 
 // ---- pages -----------------------------------------------------------------
@@ -483,13 +553,17 @@ fn last_hour<'a>(samples: impl Iterator<Item = &'a Sample>) -> Vec<&'a Sample> {
     samples.filter(|s| s.at >= since).collect()
 }
 
-fn refreshing(path: &str, body: Markup) -> Markup {
-    html! {
-        div #usage hx-get=(path) hx-trigger="every 5s" hx-select="#usage" hx-swap="outerHTML" { (body) }
-    }
+fn refreshing(path: &str, body: AnyView) -> AnyView {
+    view! { <div id="usage" hx-get=path.to_string() hx-trigger="every 5s" hx-select="#usage" hx-swap="outerHTML">{body}</div> }
+        .into_any()
 }
 
-pub fn dashboard(p: &Platform, user: &User) -> Markup {
+/// "· 2 failed" after a request count, if any failed.
+fn fails_note(fails: usize) -> Option<AnyView> {
+    (fails > 0).then(|| view! { " · "<span class="fail-text">{format!("{fails} failed")}</span> }.into_any())
+}
+
+pub fn dashboard(p: &Platform, user: &User) -> String {
     let all = samples(&p.db(), None);
     let apps = app_list(p, &all);
     let hour = last_hour(all.iter());
@@ -504,54 +578,60 @@ pub fn dashboard(p: &Platform, user: &User) -> Markup {
         .max_by(|a, b| a.1.total_cmp(&b.1));
     let refs: Vec<&Sample> = all.iter().collect();
 
-    let body = html! {
-        header.page-header {
-            h1 { "Usage" }
-            p.subtitle { "What each app's requests cost, measured by the platform. Apps can't skip or fake this." }
+    let tightest = match tightest {
+        Some((name, pct)) => view! {
+            <span class="stat-value">{format!("{}%", num(pct, 0))}</span>
+            <span class="stat-label">{format!("of its I/O budget used at p95 by {name}, the closest to its limit")}</span>
         }
-        div.stats {
-            div.stat.stat-neutral { span.stat-value { (hour.len()) } span.stat-label { "app requests in the last hour" } }
-            div class=(if failed > 0 { "stat stat-refused" } else { "stat" }) {
-                span.stat-value { (failed) } span.stat-label { "failed or stopped in the last hour" }
-            }
-            div.stat.stat-neutral {
-                @if let Some((name, pct)) = tightest {
-                    span.stat-value { (num(pct, 0)) "%" }
-                    span.stat-label { "of its I/O budget used at p95 by " (name) ", the closest to its limit" }
-                } @else {
-                    span.stat-value { "—" } span.stat-label { "of I/O budget used" }
-                }
-            }
-        }
-        div.card {
-            h3.chart-title { "Requests per minute, all apps" }
-            (per_minute(FULL, &refs))
-        }
-        h2.section-title { "Apps" }
-        @for (id, name, m) in &apps {
-            @let mine: Vec<&Sample> = all.iter().filter(|s| s.app_id == *id).collect();
-            @let fails = mine.iter().filter(|s| s.failed()).count();
-            div.card.app-card {
-                div.app-head {
-                    div {
-                        h3 { a href=(format!("/admin/usage/{id}")) { (name) } " " span.muted.mono { (id) } }
-                        p.muted {
-                            (mine.len()) " requests recorded"
-                            @if fails > 0 { " · " span.fail-text { (fails) " failed" } }
-                            @if let Some(m) = m { " · live: v" (m.app.version) }
-                        }
-                    }
-                    a.btn.small href=(format!("/admin/usage/{id}")) { "Details" }
-                }
-                (metrics_table(&mine, io_limit(m.as_ref())))
-            }
-        }
-        @if apps.is_empty() { div.card { p.muted { "No apps yet." } } }
+        .into_any(),
+        None => view! { <span class="stat-value">"—"</span><span class="stat-label">"of I/O budget used"</span> }.into_any(),
     };
-    views::layout("Usage", Some(user), "/admin/usage", refreshing("/admin/usage", body), vec![])
+    let cards = apps
+        .iter()
+        .map(|(id, name, m)| {
+            let mine: Vec<&Sample> = all.iter().filter(|s| s.app_id == *id).collect();
+            let fails = mine.iter().filter(|s| s.failed()).count();
+            let live = m.as_ref().map(|m| format!(" · live: v{}", m.app.version));
+            view! {
+                <div class="card app-card">
+                    <div class="app-head">
+                        <div>
+                            <h3><a href=format!("/admin/usage/{id}")>{name.clone()}</a>" "<span class="muted mono">{id.clone()}</span></h3>
+                            <p class="muted">{format!("{} requests recorded", mine.len())}{fails_note(fails)}{live}</p>
+                        </div>
+                        <a class="btn small" href=format!("/admin/usage/{id}")>"Details"</a>
+                    </div>
+                    {metrics_table(&mine, io_limit(m.as_ref()))}
+                </div>
+            }
+        })
+        .collect_view();
+    let body = view! {
+        <header class="page-header">
+            <h1>"Usage"</h1>
+            <p class="subtitle">"What each app's requests cost, measured by the platform. Apps can't skip or fake this."</p>
+        </header>
+        <div class="stats">
+            <div class="stat stat-neutral">
+                <span class="stat-value">{hour.len()}</span><span class="stat-label">"app requests in the last hour"</span>
+            </div>
+            <div class={if failed > 0 { "stat stat-refused" } else { "stat" }}>
+                <span class="stat-value">{failed}</span><span class="stat-label">"failed or stopped in the last hour"</span>
+            </div>
+            <div class="stat stat-neutral">{tightest}</div>
+        </div>
+        <div class="card">
+            <h3 class="chart-title">"Requests per minute, all apps"</h3>
+            {per_minute(FULL, &refs)}
+        </div>
+        <h2 class="section-title">"Apps"</h2>
+        {cards}
+        {apps.is_empty().then(|| view! { <div class="card"><p class="muted">"No apps yet."</p></div> })}
+    };
+    views::layout("Usage", Some(user), "/admin/usage", refreshing("/admin/usage", body.into_any()), vec![])
 }
 
-pub fn app_page(p: &Platform, user: &User, app_id: &str) -> Option<Markup> {
+pub fn app_page(p: &Platform, user: &User, app_id: &str) -> Option<String> {
     let all = samples(&p.db(), Some(app_id));
     let versions = versions(&p.db(), app_id);
     if all.is_empty() && versions.is_empty() {
@@ -569,60 +649,72 @@ pub fn app_page(p: &Platform, user: &User, app_id: &str) -> Option<Markup> {
     let io = summarize(all.iter().filter(|s| s.ran()).map(|s| s.io));
     let path = format!("/admin/usage/{app_id}");
 
-    let body = html! {
-        header.page-header {
-            p.crumb { a href="/admin/usage" { "← Usage" } }
-            h1 { (name) " " span.muted.mono.h1-id { (app_id) } }
-            p.subtitle {
-                @if let Some(m) = &live { "Live: v" (m.app.version) " · I/O limit " (m.limits.io_per_request) " units per request" }
-                @else { "Not live" }
-            }
-        }
-        div.stats.stats-4 {
-            div.stat.stat-neutral { span.stat-value { (all.len()) } span.stat-label { "requests recorded" } }
-            div class=(if failed > 0 { "stat stat-refused" } else { "stat" }) { span.stat-value { (failed) } span.stat-label { "failed or stopped" } }
-            div.stat.stat-neutral {
-                span.stat-value { @if let Some(s) = &io { (num(s.median, 0)) } @else { "—" } }
-                span.stat-label { "median I/O units per request" }
-            }
-            div.stat.stat-neutral {
-                span.stat-value { @if let Some(s) = &io { (num(s.max, 0)) } @else { "—" } " / " (limit) }
-                span.stat-label { "peak I/O vs. limit" }
-            }
-        }
-        div.card {
-            h3.chart-title { "I/O units per request" span.muted { " · last " (TIMELINE_REQUESTS) " requests" } }
-            (timeline(FULL, &refs, limit as f64))
-        }
-        div.chart-pair {
-            div.card {
-                h3.chart-title { "Distribution of I/O units" }
-                (histogram(HALF, &refs, limit as f64))
-            }
-            div.card {
-                h3.chart-title { "Requests per minute" }
-                (per_minute(HALF, &refs))
-            }
-        }
-        h2.section-title { "By version" }
-        @for (version, status, m) in &versions {
-            @let mine: Vec<&Sample> = all.iter().filter(|s| s.version == *version).collect();
-            @let fails = mine.iter().filter(|s| s.failed()).count();
-            div.card {
-                div.app-head {
-                    h3 { "v" (version) }
-                    span class=(format!("badge badge-{status}")) { (status_label(status)) }
-                }
-                p.muted {
-                    (mine.len()) " requests"
-                    @if fails > 0 { " · " span.fail-text { (fails) " failed" } }
-                    " · I/O limit " (io_limit(m.as_ref()))
-                }
-                @if !mine.is_empty() { (metrics_table(&mine, io_limit(m.as_ref()))) }
-            }
-        }
+    let subtitle = match &live {
+        Some(m) => format!("Live: v{} · I/O limit {} units per request", m.app.version, m.limits.io_per_request),
+        None => "Not live".to_string(),
     };
-    Some(views::layout(&format!("{name} usage"), Some(user), "/admin/usage", refreshing(&path, body), vec![]))
+    let median = io.as_ref().map_or_else(|| "—".to_string(), |s| num(s.median, 0));
+    let peak = format!("{} / {limit}", io.as_ref().map_or_else(|| "—".to_string(), |s| num(s.max, 0)));
+    let by_version = versions
+        .iter()
+        .map(|(version, status, m)| {
+            let mine: Vec<&Sample> = all.iter().filter(|s| s.version == *version).collect();
+            let fails = mine.iter().filter(|s| s.failed()).count();
+            let table = (!mine.is_empty()).then(|| metrics_table(&mine, io_limit(m.as_ref())));
+            view! {
+                <div class="card">
+                    <div class="app-head">
+                        <h3>{format!("v{version}")}</h3>
+                        <span class=format!("badge badge-{status}")>{status_label(status).to_string()}</span>
+                    </div>
+                    <p class="muted">
+                        {format!("{} requests", mine.len())}
+                        {fails_note(fails)}
+                        {format!(" · I/O limit {}", io_limit(m.as_ref()))}
+                    </p>
+                    {table}
+                </div>
+            }
+        })
+        .collect_view();
+    let body = view! {
+        <header class="page-header">
+            <p class="crumb"><a href="/admin/usage">"← Usage"</a></p>
+            <h1>{name.clone()}" "<span class="muted mono h1-id">{app_id.to_string()}</span></h1>
+            <p class="subtitle">{subtitle}</p>
+        </header>
+        <div class="stats stats-4">
+            <div class="stat stat-neutral"><span class="stat-value">{all.len()}</span><span class="stat-label">"requests recorded"</span></div>
+            <div class={if failed > 0 { "stat stat-refused" } else { "stat" }}>
+                <span class="stat-value">{failed}</span><span class="stat-label">"failed or stopped"</span>
+            </div>
+            <div class="stat stat-neutral">
+                <span class="stat-value">{median}</span>
+                <span class="stat-label">"median I/O units per request"</span>
+            </div>
+            <div class="stat stat-neutral">
+                <span class="stat-value">{peak}</span>
+                <span class="stat-label">"peak I/O vs. limit"</span>
+            </div>
+        </div>
+        <div class="card">
+            <h3 class="chart-title">"I/O units per request"<span class="muted">{format!(" · last {TIMELINE_REQUESTS} requests")}</span></h3>
+            {timeline(FULL, &refs, limit as f64)}
+        </div>
+        <div class="chart-pair">
+            <div class="card">
+                <h3 class="chart-title">"Distribution of I/O units"</h3>
+                {histogram(HALF, &refs, limit as f64)}
+            </div>
+            <div class="card">
+                <h3 class="chart-title">"Requests per minute"</h3>
+                {per_minute(HALF, &refs)}
+            </div>
+        </div>
+        <h2 class="section-title">"By version"</h2>
+        {by_version}
+    };
+    Some(views::layout(&format!("{name} usage"), Some(user), "/admin/usage", refreshing(&path, body.into_any()), vec![]))
 }
 
 fn status_label(status: &str) -> &str {
@@ -667,9 +759,9 @@ pub fn last_hour_by_app(db: &Connection) -> LastHour {
 
 impl LastHour {
     /// A small bar chart of one app's last hour, linking to its usage page.
-    pub fn sparkline(&self, app_id: &str) -> Markup {
+    pub fn sparkline(&self, app_id: &str) -> AnyView {
         let Some((ok, failed)) = self.apps.get(app_id) else {
-            return html! { span.spark-empty { "No requests in the last hour" } };
+            return view! { <span class="spark-empty">"No requests in the last hour"</span> }.into_any();
         };
         let (w, h) = (120.0, 28.0);
         let slot = w / SPARK_BUCKETS as f64;
@@ -677,31 +769,42 @@ impl LastHour {
         let total: usize = ok.iter().sum::<usize>() + failed.iter().sum::<usize>();
         let fails: usize = failed.iter().sum();
         let ago = |i: usize| (SPARK_BUCKETS as usize - i) * (SPARK_BUCKET_MS / 60_000) as usize;
-        html! {
-            a.spark href=(format!("/admin/usage/{app_id}")) {
-                svg.viz.spark-chart viewBox=(format!("0 0 {w} {h}")) width=(w) height=(h) role="img"
-                    aria-label=(format!("{total} requests in the last hour, {fails} failed")) {
-                    line.baseline x1="0" x2=(w) y1=(h - 0.5) y2=(h - 0.5) {}
-                    @for i in 0..SPARK_BUCKETS as usize {
-                        @if ok[i] + failed[i] > 0 {
-                            @let (x, bw) = (i as f64 * slot + 0.5, slot - 1.0);
-                            g.col {
-                                title { (ago(i)) " min ago: " (ok[i] + failed[i]) " requests" @if failed[i] > 0 { ", " (failed[i]) " failed" } }
-                                rect.hit x=(f(x)) y="0" width=(f(bw)) height=(h) {}
-                                @if ok[i] > 0 { rect.bar x=(f(x)) y=(f(y(ok[i]))) width=(f(bw)) height=(f(h - y(ok[i]))) {} }
-                                @if failed[i] > 0 {
-                                    @let top = y(ok[i] + failed[i]).min(y(ok[i]) - 1.0);
-                                    rect.bar.bar-fail x=(f(x)) y=(f(top)) width=(f(bw)) height=(f(y(ok[i]) - top)) {}
-                                }
-                            }
-                        }
-                    }
+        let columns = (0..SPARK_BUCKETS as usize)
+            .filter(|&i| ok[i] + failed[i] > 0)
+            .map(|i| {
+                let (x, bw) = (i as f64 * slot + 0.5, slot - 1.0);
+                let tip = format!("{} min ago: {}", ago(i), requests_failed(ok[i] + failed[i], failed[i]));
+                let ok_bar = (ok[i] > 0)
+                    .then(|| view! { <rect class="bar" x=f(x) y=f(y(ok[i])) width=f(bw) height=f(h - y(ok[i]))></rect> });
+                let fail_bar = (failed[i] > 0).then(|| {
+                    let top = y(ok[i] + failed[i]).min(y(ok[i]) - 1.0);
+                    view! { <rect class="bar bar-fail" x=f(x) y=f(top) width=f(bw) height=f(y(ok[i]) - top)></rect> }
+                });
+                view! {
+                    <g class="col">
+                        <title>{tip}</title>
+                        <rect class="hit" x=f(x) y="0" width=f(bw) height=h.to_string()></rect>
+                        {ok_bar}
+                        {fail_bar}
+                    </g>
                 }
-                span.spark-label {
-                    (total) " req"
-                    @if fails > 0 { ", " span.fail-text { (fails) " failed" } }
-                }
-            }
+            })
+            .collect_view();
+        view! {
+            <a class="spark" href=format!("/admin/usage/{app_id}")>
+                <svg class="viz spark-chart" viewBox=format!("0 0 {w} {h}") width=w.to_string() height=h.to_string() role="img"
+                    aria-label=format!("{total} requests in the last hour, {fails} failed")>
+                    <line class="baseline" x1="0" x2=w.to_string() y1=(h - 0.5).to_string() y2=(h - 0.5).to_string()></line>
+                    {columns}
+                </svg>
+                <span class="spark-label">{format!("{total} req")}{fails_note_comma(fails)}</span>
+            </a>
         }
+        .into_any()
     }
+}
+
+/// ", 2 failed" after a short request count, if any failed.
+fn fails_note_comma(fails: usize) -> Option<AnyView> {
+    (fails > 0).then(|| view! { ", "<span class="fail-text">{format!("{fails} failed")}</span> }.into_any())
 }

@@ -1,11 +1,16 @@
 //! The AppOS SDK: bindings to the platform APIs plus small helpers.
 //!
-//! An app implements [`App`] and registers it with [`export!`]:
+//! An app implements [`App`] and registers it with [`export!`]. Pages are
+//! Leptos views, rendered to HTML inside the sandbox with [`render`]:
 //!
 //! ```ignore
+//! use leptos::prelude::*;
+//!
 //! struct MyApp;
 //! impl appos_sdk::App for MyApp {
-//!     fn handle(req: Request) -> Response { appos_sdk::page("Hello", "<p>hi</p>".into()) }
+//!     fn handle(req: Request) -> Response {
+//!         appos_sdk::page("Hello", appos_sdk::render(|| view! { <p>"Hi, " {req.path}</p> }))
+//!     }
 //! }
 //! appos_sdk::export!(MyApp with_types_in appos_sdk::bindings);
 //! ```
@@ -24,6 +29,13 @@ pub use bindings::appos::platform::types::{BodyKind, Booking, Pod, Request, Resp
 pub use bindings::appos::platform::{bookings_read, bookings_write, identity, log, pods_read, pods_write};
 pub use bindings::exports::appos::platform::handler::Guest as App;
 pub use bindings::export;
+
+/// Renders a Leptos view to HTML. Text is escaped; the view runs once, on
+/// the server, so it needs no signals and ships no JavaScript.
+pub fn render<V: leptos::prelude::IntoView>(view: impl FnOnce() -> V) -> String {
+    use leptos::prelude::{Owner, RenderHtml};
+    Owner::new().with(|| view().into_view().to_html())
+}
 
 /// First value for `key` in a list of query or form pairs.
 pub fn param<'a>(pairs: &'a [(String, String)], key: &str) -> Option<&'a str> {

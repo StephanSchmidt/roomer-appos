@@ -9,15 +9,17 @@ same idea to a web app: the site is a shell that runs apps, every app
 declares the permissions it needs, the platform enforces them, and every
 version is reviewed automatically before it goes live.
 
-Roomer is a small pod-booking site built this way, in Rust. It is the demo
-for [appfuzz](https://appfuzz.dev), the app review.
+Roomer is a small pod-booking site built this way, in Rust with
+[Leptos](https://leptos.dev). Its apps are Leptos components too, compiled
+to WebAssembly and rendered on the server, inside the sandbox. It is the
+demo for [appfuzz](https://appfuzz.dev), the app review.
 
 ## Two sides
 
 | | Who | What |
 |-|-----|------|
 | `platform/` | the platform team | the shell: sandbox, platform APIs, sign-in, layout, app versions, review. Ships as one binary, `roomer` |
-| `apps/` | marketing and product, through their agents | four apps, each a WebAssembly component with a manifest (`app.toml`) |
+| `apps/` | marketing and product, through their agents | four apps, each a Leptos component built as a WebAssembly component, with a manifest (`app.toml`) |
 
 The apps never see the shell's code. They build against the **platform
 kit** in `apps/kit/`: [HOST-API.md](apps/kit/HOST-API.md) (what every

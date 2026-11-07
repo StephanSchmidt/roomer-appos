@@ -5,4 +5,5 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
+leptos = { version = "0.8", features = ["ssr"] }
 wit-bindgen = "0.63"

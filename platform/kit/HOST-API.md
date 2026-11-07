@@ -43,8 +43,8 @@ your form fills with a number can hold any text.
 | `body` | HTML |
 | `headers` | only `location` and `hx-*` headers are passed on, and a `location` (or `hx-redirect`, `hx-location`) only to a path on this site, like `/quick?done=1`. Everything else is dropped |
 
-The SDK has helpers: `page(title, body)`, `fragment(body)` and
-`not_found()`.
+The SDK has helpers: `render(|| view! { … })` turns a Leptos view into
+HTML, then `page(title, body)`, `fragment(body)` and `not_found()`.
 
 ### What your HTML may do
 
@@ -58,7 +58,8 @@ The SDK has helpers: `page(title, body)`, `fragment(body)` and
   `/assets` belong to the shell. Markup that sends requests there on its
   own, or that requests anything the user didn't ask for, fails review.
 - **Escape what you show.** Booking subjects, pod names and user names are
-  typed in by people. Show them escaped (maud and the SDK's helpers do).
+  typed in by people. Show them escaped: Leptos's `view!` does, as long as
+  you don't put them in `inner_html`.
 
 ## The manifest: `app.toml`
 

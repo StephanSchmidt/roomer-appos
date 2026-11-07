@@ -92,6 +92,7 @@ h3 { font-size: 1rem; font-weight: 700; }
 .layout.with-aside > aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr)); gap: 20px; }
 
 .app-frame { position: relative; margin-bottom: 0; }
+.app-body { display: contents; } /* holds the app's HTML; adds no box */
 .app-tag {
   display: inline-flex; align-items: center; gap: 7px; margin-top: 14px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; color: var(--faint);

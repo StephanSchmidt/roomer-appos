@@ -9,5 +9,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 appos-sdk.workspace = true
-maud.workspace = true
+leptos.workspace = true
 wit-bindgen.workspace = true

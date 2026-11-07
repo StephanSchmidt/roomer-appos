@@ -2,10 +2,10 @@
 
 use appos_sdk::{
     App, Booking, Pod, Request, Response, bookings_read, bookings_write, encode, hx_redirect, identity, page, param,
-    pods_read, redirect,
+    pods_read, redirect, render,
 };
 use chrono::{Datelike, NaiveDate, Weekday};
-use maud::{Markup, html};
+use leptos::prelude::*;
 
 struct BookingGrid;
 
@@ -187,10 +187,12 @@ fn view(req: &Request) -> Response {
         .or_else(|| pods.iter().find(|p| day.first_free(p.id).is_some()))
         .or(pods.first());
     let Some(pod) = pod else {
-        let body = html! {
-            header.hero { h1 { "Book a pod" } p { "There are no pods yet. Add one on the Pods page." } }
-        };
-        return page("Book a pod", body.into_string());
+        let body = render(|| {
+            view! {
+                <header class="hero"><h1>"Book a pod"</h1><p>"There are no pods yet. Add one on the Pods page."</p></header>
+            }
+        });
+        return page("Book a pod", body);
     };
 
     let hour_param = |k| param(&req.query, k).and_then(|h| h.parse::<u8>().ok());
@@ -217,81 +219,94 @@ fn view(req: &Request) -> Response {
         (false, _) => format!("Planning ahead for {}. Pick a pod, pick your hours, done.", date.format("%A %-d %B")),
     };
 
-    let body = html! {
-        header.hero {
-            h1 { "Book a pod" }
-            p { (intro) }
-        }
-        div.booking {
-            section.step.step-pods aria-labelledby="step-pod" {
-                h2 #step-pod { span.step-n { "1" } "Pick a pod" }
-                div role="radiogroup" aria-labelledby="step-pod" {
-                    @for p in &pods {
-                        @let on = p.id == pod.id;
-                        @let (status, free) = day.status(p.id, is_today);
-                        a.pod-option.on[on] href=(url(date, p.id, "")) role="radio" aria-checked=(flag(on)) {
-                            span.radio {}
-                            span.pod-text {
-                                span.pod-name { (p.name) }
-                                span.pod-meta { (day.free_hours(p.id)) " of " (hours.len()) " hours free" }
-                                span.pod-status.free[free] { (status) }
+    let day_label = if is_today { "today".to_string() } else { date.format("%A").to_string() };
+    let user = user.map(|u| u.name);
+    let body = render(|| {
+        view! {
+            <header class="hero">
+                <h1>"Book a pod"</h1>
+                <p>{intro}</p>
+            </header>
+            <div class="booking">
+                <section class="step step-pods" aria-labelledby="step-pod">
+                    <h2 id="step-pod"><span class="step-n">"1"</span>"Pick a pod"</h2>
+                    <div role="radiogroup" aria-labelledby="step-pod">
+                        {pods.iter().map(|p| {
+                            let on = p.id == pod.id;
+                            let (status, free) = day.status(p.id, is_today);
+                            view! {
+                                <a class="pod-option" class:on=on href=url(date, p.id, "") role="radio" aria-checked=flag(on)>
+                                    <span class="radio"></span>
+                                    <span class="pod-text">
+                                        <span class="pod-name">{p.name.clone()}</span>
+                                        <span class="pod-meta">{day.free_hours(p.id)}" of "{hours.len()}" hours free"</span>
+                                        <span class="pod-status" class:free=free>{status}</span>
+                                    </span>
+                                </a>
                             }
-                        }
-                    }
-                }
-            }
+                        }).collect_view()}
+                    </div>
+                </section>
 
-            section.step.step-time aria-labelledby="step-time" {
-                h2 #step-time { span.step-n { "2" } "Pick a time" }
-                div.days role="group" aria-label="Day" {
-                    @for d in &days {
-                        @let on = d.date == date;
-                        @let free = d.free_hours(pod.id);
-                        a.day.on[on] href=(url(d.date, pod.id, "")) aria-current=[on.then_some("date")] {
-                            span.day-wk { (d.date.format("%a")) }
-                            span.day-n { (d.date.day()) }
-                            span.day-free.none[free == 0] {
-                                @if free > 0 { (free) " h free" } @else if d.closed() { "Closed" } @else { "Full" }
+                <section class="step step-time" aria-labelledby="step-time">
+                    <h2 id="step-time"><span class="step-n">"2"</span>"Pick a time"</h2>
+                    <div class="days" role="group" aria-label="Day">
+                        {days.iter().map(|d| {
+                            let on = d.date == date;
+                            let free = d.free_hours(pod.id);
+                            let label = if free > 0 {
+                                format!("{free} h free")
+                            } else if d.closed() {
+                                "Closed".to_string()
+                            } else {
+                                "Full".to_string()
+                            };
+                            view! {
+                                <a class="day" class:on=on href=url(d.date, pod.id, "") aria-current=on.then_some("date")>
+                                    <span class="day-wk">{d.date.format("%a").to_string()}</span>
+                                    <span class="day-n">{d.date.day()}</span>
+                                    <span class="day-free" class:none={free == 0}>{label}</span>
+                                </a>
                             }
-                        }
-                    }
-                }
-                div.hours-head {
-                    h3 { (pod.name) " on " (if is_today { "today".to_string() } else { date.format("%A").to_string() }) }
-                    span { "Tap a start, then an end" }
-                }
-                div.hours {
-                    @for h in &hours {
-                        (slot(day, pod.id, *h, &pick))
-                    }
-                }
-            }
+                        }).collect_view()}
+                    </div>
+                    <div class="hours-head">
+                        <h3>{pod.name.clone()}" on "{day_label}</h3>
+                        <span>"Tap a start, then an end"</span>
+                    </div>
+                    <div class="hours">
+                        {hours.iter().map(|h| slot(day, pod.id, *h, &pick)).collect_view()}
+                    </div>
+                </section>
 
-            (confirm(req, day, pod, &pick, user.as_ref().map(|u| u.name.as_str())))
+                {confirm(req, day, pod, &pick, user)}
+            </div>
         }
-    };
-    page("Book a pod", body.into_string())
+    });
+    page("Book a pod", body)
 }
 
 /// One hour of the slot picker.
-fn slot(day: &Day, pod: u32, hour: u8, pick: &Pick) -> Markup {
+fn slot(day: &Day, pod: u32, hour: u8, pick: &Pick) -> AnyView {
     let time = hhmm(hour);
     match day.state(pod, hour) {
-        State::Past => html! { span.hour.past aria-disabled="true" { span { (time) } } },
-        State::Taken(b) => html! {
-            span.hour.taken aria-disabled="true" title=(format!("Booked by {}", b.booker_name)) {
-                span { (time) } span.hour-note { (b.booker_name) }
-            }
-        },
+        State::Past => view! { <span class="hour past" aria-disabled="true"><span>{time}</span></span> }.into_any(),
+        State::Taken(b) => view! {
+            <span class="hour taken" aria-disabled="true" title=format!("Booked by {}", b.booker_name)>
+                <span>{time}</span><span class="hour-note">{b.booker_name.clone()}</span>
+            </span>
+        }
+        .into_any(),
         State::Mine(b) => {
             let on = matches!(pick, Pick::Yours(m) if m.id == b.id)
                 || matches!(pick, Pick::Booked(f, t) if (*f..*t).contains(&hour));
             let class = if on { "hour mine on" } else { "hour mine" };
-            html! {
-                a class=(class) href=(url(day.date, pod, &format!("&booking={}", b.id))) title=(b.subject) aria-pressed=(flag(on)) {
-                    span { (time) } span.hour-note { "You" }
-                }
+            view! {
+                <a class=class href=url(day.date, pod, &format!("&booking={}", b.id)) title=b.subject.clone() aria-pressed=flag(on)>
+                    <span>{time}</span><span class="hour-note">"You"</span>
+                </a>
             }
+            .into_any()
         }
         State::Free => {
             let range = match pick {
@@ -309,80 +324,83 @@ fn slot(day: &Day, pod: u32, hour: u8, pick: &Pick) -> Markup {
                 Some((f, _)) if hour > f && (f..=hour).all(|h| day.free(pod, h)) => (f, hour + 1),
                 _ => (hour, hour + 1),
             };
-            html! {
-                a.hour.free.pick[on] href=(url(day.date, pod, &format!("&from={from}&to={to}"))) aria-pressed=(flag(on)) {
-                    span { (time) } span.hour-note { (note) }
-                }
+            view! {
+                <a class="hour free" class:pick=on href=url(day.date, pod, &format!("&from={from}&to={to}")) aria-pressed=flag(on)>
+                    <span>{time}</span><span class="hour-note">{(!note.is_empty()).then_some(note)}</span>
+                </a>
             }
+            .into_any()
         }
     }
 }
 
 /// Step 3: the black summary card.
-fn confirm(req: &Request, day: &Day, pod: &Pod, pick: &Pick, user: Option<&str>) -> Markup {
+fn confirm(req: &Request, day: &Day, pod: &Pod, pick: &Pick, user: Option<String>) -> impl IntoView {
     let date = day.date;
     let when = |n: u8| format!("{}, {}", date.format("%A %-d %B"), hours_text(n));
     let range = |from: u8, to: u8| {
-        html! {
-            div.confirm-time {
-                span.confirm-range { (hhmm(from)) "–" (hhmm(to)) }
-                span { (when(to - from)) }
-            }
+        view! {
+            <div class="confirm-time">
+                <span class="confirm-range">{hhmm(from)}"–"{hhmm(to)}</span>
+                <span>{when(to - from)}</span>
+            </div>
         }
     };
-    let error = param(&req.query, "error");
-    html! {
-        aside.confirm aria-label="Summary" {
-            @match pick {
-                Pick::Yours(b) => {
-                    h2 { span.step-n { "3" } "Your booking" }
-                    (range(b.hour, b.hour + 1))
-                    dl {
-                        div { dt { "Pod" } dd { (pod.name) } }
-                        div { dt { "For" } dd { (b.subject) } }
-                    }
-                    @if let Some(e) = error { p.confirm-error { (e) } }
-                    button.btn-cancel type="button" hx-delete=(format!("/bookings/{}?date={}&pod={}", b.id, ymd(date), pod.id))
-                        hx-confirm=(format!("Cancel your {} booking at {}?", pod.name, hhmm(b.hour))) { "Cancel booking" }
-                    a.confirm-link href=(url(date, pod.id, "")) { "Book another time" }
-                }
-                Pick::Booked(from, to) => {
-                    h2 { span.step-n.done { "✓" } "Booked" }
-                    (range(*from, *to))
-                    dl {
-                        div { dt { "Pod" } dd { (pod.name) } }
-                        @if let Some(name) = user { div { dt { "Booked for" } dd { (name) } } }
-                    }
-                    p.confirm-note { "It's yours. To cancel, tap one of your hours." }
-                    a.btn-book href=(url(date, pod.id, "")) { "Book another time" }
-                }
-                Pick::Range(from, to) => {
-                    h2 { span.step-n { "3" } "Confirm" }
-                    (range(*from, *to))
-                    dl {
-                        div { dt { "Pod" } dd { (pod.name) } }
-                        @if let Some(name) = user { div { dt { "Booking as" } dd { (name) } } }
-                    }
-                    @if let Some(note) = nearby(day, pod, *from, *to) { p.confirm-note { (note) } }
-                    @if let Some(e) = error { p.confirm-error { (e) } }
-                    form.confirm-form method="post" action="/bookings" {
-                        input type="hidden" name="pod_id" value=(pod.id);
-                        input type="hidden" name="date" value=(ymd(date));
-                        input type="hidden" name="from" value=(from);
-                        input type="hidden" name="to" value=(to);
-                        label for="subject" { "What for?" }
-                        input #subject type="text" name="subject" placeholder="Writing the Q4 plan" maxlength="80" required;
-                        button.btn-book type="submit" { "Book " (pod.name) }
-                    }
-                    span.confirm-foot { "You can cancel it here until it starts." }
-                }
-                Pick::Nothing => {
-                    h2 { span.step-n { "3" } "Confirm" }
-                    p.confirm-empty { (pod.name) " has no free hours left on " (date.format("%A")) ". Try another pod or day." }
-                }
-            }
+    let error = param(&req.query, "error").map(|e| e.to_string());
+    let name = pod.name.clone();
+    let card = match pick {
+        Pick::Yours(b) => view! {
+            <h2><span class="step-n">"3"</span>"Your booking"</h2>
+            {range(b.hour, b.hour + 1)}
+            <dl>
+                <div><dt>"Pod"</dt><dd>{name.clone()}</dd></div>
+                <div><dt>"For"</dt><dd>{b.subject.clone()}</dd></div>
+            </dl>
+            {error.map(|e| view! { <p class="confirm-error">{e}</p> })}
+            <button class="btn-cancel" type="button" hx-delete=format!("/bookings/{}?date={}&pod={}", b.id, ymd(date), pod.id)
+                hx-confirm=format!("Cancel your {} booking at {}?", name, hhmm(b.hour))>"Cancel booking"</button>
+            <a class="confirm-link" href=url(date, pod.id, "")>"Book another time"</a>
         }
-    }
+        .into_any(),
+        Pick::Booked(from, to) => view! {
+            <h2><span class="step-n done">"✓"</span>"Booked"</h2>
+            {range(*from, *to)}
+            <dl>
+                <div><dt>"Pod"</dt><dd>{name}</dd></div>
+                {user.map(|name| view! { <div><dt>"Booked for"</dt><dd>{name}</dd></div> })}
+            </dl>
+            <p class="confirm-note">"It's yours. To cancel, tap one of your hours."</p>
+            <a class="btn-book" href=url(date, pod.id, "")>"Book another time"</a>
+        }
+        .into_any(),
+        Pick::Range(from, to) => view! {
+            <h2><span class="step-n">"3"</span>"Confirm"</h2>
+            {range(*from, *to)}
+            <dl>
+                <div><dt>"Pod"</dt><dd>{name.clone()}</dd></div>
+                {user.map(|name| view! { <div><dt>"Booking as"</dt><dd>{name}</dd></div> })}
+            </dl>
+            {nearby(day, pod, *from, *to).map(|note| view! { <p class="confirm-note">{note}</p> })}
+            {error.map(|e| view! { <p class="confirm-error">{e}</p> })}
+            <form class="confirm-form" method="post" action="/bookings">
+                <input type="hidden" name="pod_id" value=pod.id/>
+                <input type="hidden" name="date" value=ymd(date)/>
+                <input type="hidden" name="from" value=*from/>
+                <input type="hidden" name="to" value=*to/>
+                <label for="subject">"What for?"</label>
+                <input id="subject" type="text" name="subject" placeholder="Writing the Q4 plan" maxlength="80" required/>
+                <button class="btn-book" type="submit">"Book "{name}</button>
+            </form>
+            <span class="confirm-foot">"You can cancel it here until it starts."</span>
+        }
+        .into_any(),
+        Pick::Nothing => view! {
+            <h2><span class="step-n">"3"</span>"Confirm"</h2>
+            <p class="confirm-empty">{name}" has no free hours left on "{date.format("%A").to_string()}". Try another pod or day."</p>
+        }
+        .into_any(),
+    };
+    view! { <aside class="confirm" aria-label="Summary">{card}</aside> }
 }
 
 /// Your other bookings next to or on top of the picked hours.

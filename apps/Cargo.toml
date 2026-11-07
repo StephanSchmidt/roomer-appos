@@ -10,7 +10,7 @@ license = "MIT"
 
 [workspace.dependencies]
 appos-sdk = { path = "kit/sdk" }
-maud = "0.27"
+leptos = { version = "0.8", features = ["ssr"] }
 wit-bindgen = "0.63"
 
 [profile.release]

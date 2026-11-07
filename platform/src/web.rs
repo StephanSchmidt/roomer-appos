@@ -70,7 +70,7 @@ fn pairs(s: &str) -> Vec<(String, String)> {
 
 async fn login_page(State(p): AppState) -> Html<String> {
     let users = db::users(&p.db()).unwrap_or_default();
-    Html(views::login(&users).into_string())
+    Html(views::login(&users))
 }
 
 #[derive(Deserialize)]
@@ -102,10 +102,10 @@ async fn admin_page(State(p): AppState, headers: HeaderMap, Query(q): Query<Admi
     let Some(user) = current_user(&p, &headers) else { return Redirect::to("/_shell/login").into_response() };
     if !user.is_admin {
         let page = views::message("Platform team only", "App versions are managed by the platform team.", Some(&user));
-        return (StatusCode::FORBIDDEN, Html(page.into_string())).into_response();
+        return (StatusCode::FORBIDDEN, Html(page)).into_response();
     }
     let page = admin::page(&p.db(), &p.policy, &user, q.view.as_deref(), q.error.as_deref());
-    Html(page.into_string()).into_response()
+    Html(page).into_response()
 }
 
 /// Marks every problem so far as seen, which clears "Needs you".
@@ -125,7 +125,7 @@ async fn usage_page(State(p): AppState, headers: HeaderMap) -> Response {
         Ok(u) => u,
         Err(r) => return *r,
     };
-    Html(usage::dashboard(&p, &user).into_string()).into_response()
+    Html(usage::dashboard(&p, &user)).into_response()
 }
 
 async fn app_usage_page(State(p): AppState, headers: HeaderMap, Path(app): Path<String>) -> Response {
@@ -134,10 +134,10 @@ async fn app_usage_page(State(p): AppState, headers: HeaderMap, Path(app): Path<
         Err(r) => return *r,
     };
     match usage::app_page(&p, &user, &app) {
-        Some(page) => Html(page.into_string()).into_response(),
+        Some(page) => Html(page).into_response(),
         None => {
             let page = views::message("Not found", "No app with that id has run yet.", Some(&user));
-            (StatusCode::NOT_FOUND, Html(page.into_string())).into_response()
+            (StatusCode::NOT_FOUND, Html(page)).into_response()
         }
     }
 }
@@ -147,7 +147,7 @@ fn admin_user(p: &Platform, headers: &HeaderMap) -> Result<User, Box<Response>> 
     let Some(user) = current_user(p, headers) else { return Err(Box::new(Redirect::to("/_shell/login").into_response())) };
     if !user.is_admin {
         let page = views::message("Platform team only", "Usage is visible to the platform team.", Some(&user));
-        return Err(Box::new((StatusCode::FORBIDDEN, Html(page.into_string())).into_response()));
+        return Err(Box::new((StatusCode::FORBIDDEN, Html(page)).into_response()));
     }
     Ok(user)
 }
@@ -265,7 +265,7 @@ async fn dispatch(State(p): AppState, req: Request) -> Response {
     };
     let Some(app) = app else {
         let page = views::message("Not found", "No app serves this page.", Some(&user));
-        return (StatusCode::NOT_FOUND, Html(page.into_string())).into_response();
+        return (StatusCode::NOT_FOUND, Html(page)).into_response();
     };
 
     let clock = chrono::Local::now();
@@ -286,7 +286,7 @@ async fn dispatch(State(p): AppState, req: Request) -> Response {
         Err(_) => {
             let main = views::frame(&Slot::Down { manifest: app.manifest.clone() });
             let page = views::layout(&app.manifest.app.name, Some(&user), &path, main, vec![]);
-            return (StatusCode::SERVICE_UNAVAILABLE, Html(page.into_string())).into_response();
+            return (StatusCode::SERVICE_UNAVAILABLE, Html(page)).into_response();
         }
     };
 
@@ -306,7 +306,7 @@ async fn dispatch(State(p): AppState, req: Request) -> Response {
             }
             let main = views::frame(&Slot::Ok { manifest: app.manifest.clone(), body: resp.body });
             let title = resp.title.unwrap_or_else(|| app.manifest.app.name.clone());
-            views::layout(&title, Some(&user), &path, main, aside).into_string()
+            views::layout(&title, Some(&user), &path, main, aside)
         }
     };
 
